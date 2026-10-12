@@ -2,6 +2,7 @@ android/.gradle/
 android/build/
 android/app/build/
 android/.kotlin/
+android/*.log
 android/local.properties
 android/keystore.properties
 android/*.keystore
