@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,14 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
+
+// 签名配置：keystore.properties 缺失时回退 debug 签名，保证任何机器都能出包
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+val hasReleaseKey = keystorePropsFile.exists() &&
+    rootProject.file(keystoreProps.getProperty("storeFile") ?: "").exists()
 
 android {
     namespace = "com.fitrecord.app"
@@ -18,11 +28,27 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // V1 关闭 R8（技术选型）：避免 Room / kotlinx-serialization 反射规则遗漏导致运行期崩溃
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
@@ -79,4 +105,11 @@ dependencies {
     testImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+if (!hasReleaseKey) {
+    logger.warn(
+        "WARN: android/keystore.properties 或密钥库缺失 —— release 将回退到 debug 签名。"
+                + "这种包只能自测，不能用于覆盖升级。参照 keystore.properties.example 创建。"
+    )
 }
