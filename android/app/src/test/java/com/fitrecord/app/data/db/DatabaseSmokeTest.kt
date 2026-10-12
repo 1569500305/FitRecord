@@ -7,6 +7,7 @@ import com.fitrecord.app.data.db.entity.TrainingRecordEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,10 +25,15 @@ class DatabaseSmokeTest {
         ApplicationProvider.getApplicationContext(), FitRecordDatabase::class.java
     ).build()
 
+    /** Room/Android 自动建的内部表，不属于 spec 的 8 张业务表：
+     *  android_metadata（Android SQLite 惯例）、room_master_table（schema 身份校验） */
+    private val systemTables = setOf("android_metadata", "room_master_table")
+
     private fun tableNames(db: FitRecordDatabase): List<String> =
         db.openHelper.writableDatabase
             .query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
             .use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
+            .filter { it !in systemTables }
 
     @Test fun `all eight spec tables are created`() = runBlocking {
         val db = db()
@@ -37,7 +43,8 @@ class DatabaseSmokeTest {
         )
         val actual = tableNames(db)
         assertTrue("缺表：${expected - actual.toSet()}", actual.containsAll(expected))
-        assertEquals(8, expected.size)
+        // 同时守护"多建表"：只能比 spec 多也不能多（评审 M-3）
+        assertEquals("实际表：$actual", expected.size, actual.size)
         db.close()
     }
 
@@ -112,7 +119,7 @@ class DatabaseSmokeTest {
         db.trainingDao().linkBodyParts(
             listOf(com.fitrecord.app.data.db.entity.RecordBodyPartEntity(recordId, 2L))
         )
-        assertEquals(listOf(2L), db.trainingDao().bodyPartIds(recordId))
+        assertEquals(listOf(2L), db.trainingDao().linksOf(recordId).map { it.bodyPartId })
 
         db.trainingDao().deleteById(recordId)
         val leftovers = db.openHelper.writableDatabase
@@ -128,12 +135,12 @@ class DatabaseSmokeTest {
             TrainingRecordEntity(date = 20000, exerciseTypeId = typeId, durationMin = 30,
                 calories = 291.0, note = "", createdAt = 1L, updatedAt = 1L)
         )
-        // RESTRICT：有引用时删除类型应抛异常，而不是静默删掉历史
+        // RESTRICT：有引用时删除类型必须抛异常，而不是静默删掉历史（评审 M-3：拆掉弱化或断言）
         val threw = runCatching {
             db.openHelper.writableDatabase.delete("exercise_type", "id = ?", arrayOf(typeId))
         }.isFailure
-        val stillThere = db.typeDao().byId(typeId)
-        assertTrue("RESTRICT 未生效：类型被删了", threw || stillThere != null)
+        assertTrue("删除被引用的类型必须因 RESTRICT 而失败", threw)
+        assertNotNull("类型必须仍在", db.typeDao().byId(typeId))
         assertEquals(1, db.trainingDao().rangeOnce(0, Int.MAX_VALUE).size)
         db.close()
     }

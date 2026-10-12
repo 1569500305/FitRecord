@@ -2,6 +2,7 @@ package com.fitrecord.app.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.fitrecord.app.data.db.entity.ExerciseTypeEntity
@@ -31,6 +32,13 @@ interface TypeDao {
 
     @Insert
     suspend fun insertAll(entities: List<ExerciseTypeEntity>): List<Long>
+
+    /**
+     * 种子专用：已存在的类型名（唯一索引冲突）跳过而不覆盖，
+     * 因此用户改过的 MET 不会被下次启动打回，而缺掉的内置类型会被补齐（评审 I-5）。
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSeedAll(entities: List<ExerciseTypeEntity>): List<Long>
 
     /** 种子与导入用的便捷插入 */
     @Query(
