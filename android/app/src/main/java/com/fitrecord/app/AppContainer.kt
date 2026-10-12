@@ -13,6 +13,8 @@ import com.fitrecord.app.data.db.dao.TrainingDao
 import com.fitrecord.app.data.db.dao.TypeDao
 import com.fitrecord.app.data.prefs.SettingsStore
 import com.fitrecord.app.data.repo.SeedRepository
+import com.fitrecord.app.data.repo.StatsRepository
+import com.fitrecord.app.data.repo.TrainingRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +50,12 @@ class AppContainer(
 
     /** 主题模式 / 周起始日 / 最近使用类型（Task 10） */
     val settings: SettingsStore by lazy { SettingsStore.from(appContext) }
+
+    /** 记录读写与统计聚合（Task 8 / Task 11） */
+    val trainingRepo by lazy {
+        TrainingRepository(trainingDao, typeDao, profileDao, noteDao, foodDao)
+    }
+    val statsRepo by lazy { StatsRepository(statsDao, foodDao) }
 
     /**
      * 幂等：表非空则直接返回（Task 6）。
