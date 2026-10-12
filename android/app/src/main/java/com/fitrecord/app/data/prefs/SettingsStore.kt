@@ -2,6 +2,7 @@ package com.fitrecord.app.data.prefs
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -64,16 +65,24 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
      */
     fun snapshot(): Flow<AppSettings> = prefs.map { AppSettings(themeOf(it), dayOf(it), it[Keys.LAST_TYPE]) }
 
-    suspend fun setThemeMode(mode: ThemeMode) {
-        dataStore.edit { it[Keys.THEME] = mode.name }
-    }
+    suspend fun setThemeMode(mode: ThemeMode) = writeSafely { it[Keys.THEME] = mode.name }
 
-    suspend fun setFirstDayOfWeek(day: DayOfWeek) {
-        dataStore.edit { it[Keys.FIRST_DAY] = day.name }
-    }
+    suspend fun setFirstDayOfWeek(day: DayOfWeek) = writeSafely { it[Keys.FIRST_DAY] = day.name }
 
-    suspend fun setLastExerciseTypeId(id: Long) {
-        dataStore.edit { it[Keys.LAST_TYPE] = id }
+    suspend fun setLastExerciseTypeId(id: Long) = writeSafely { it[Keys.LAST_TYPE] = id }
+
+    /**
+     * 写路径也必须兜 IOException（复审 I-1 残留）：`edit()` 与读走同一条 read 链路，
+     * 文件损坏时只兜读不兜写，等于"启动不崩了，但改一次设置崩一次"。
+     * 这里选择吐掉而不是上抛：设置是非关键数据（读侧已回落默认值），
+     * 最坏结果是下次启动回到默认主题/周起始日；而训练记录走 Room，不经这条路。
+     */
+    private suspend fun writeSafely(block: (MutablePreferences) -> Unit) {
+        try {
+            dataStore.edit(block)
+        } catch (_: IOException) {
+            // 故意不抛：UI 侧（Task 24）不得因为一个偏好写不进去而崩
+        }
     }
 
     /** 测试专用：写入无法解析的脏值，验证回落而不是抛 */

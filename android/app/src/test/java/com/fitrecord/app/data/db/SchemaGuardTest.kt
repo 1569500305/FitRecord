@@ -116,4 +116,33 @@ class SchemaGuardTest {
         db.close()
         context.deleteDatabase(name)
     }
+
+    /**
+     * 守护 5（复审 I-4 的实质加固）：库里的版本与代码不匹配时必须**报错**而不是静默重建。
+     *
+     * 这才是真正兜住 `fallbackToDestructiveMigration()` 的一条：守护 2 两侧版本都是 1，
+     * Room 本来就不会进重建分支，加了那个 flag 也不会变红；而本守护把 user_version 拨到
+     * 一个未登记的版本，模"升级到没有迁移路径的版本"：现在会抛；
+     * 谁加了破坏式回退，这里就会静默返回 null 而变红。
+     */
+    @Test fun `version mismatch fails loudly instead of silently wiping data`() = runBlocking<Unit> {
+        val context = ctx()
+        val name = "guard_fail.db"
+        context.deleteDatabase(name)
+
+        val db = FitRecordDatabase.build(context, name)
+        db.metaDao().put(MetaEntity("probe", "kept"))
+        // SupportSQLiteDatabase 没有 setVersion，Room 的版本就存在 SQLite 的 PRAGMA user_version 里
+        db.openHelper.writableDatabase.execSQL("PRAGMA user_version = 99")
+        db.close()
+
+        val reopened = FitRecordDatabase.build(context, name)
+        val result = runCatching { reopened.metaDao().get("probe") }
+        assertTrue(
+            "版本不匹配必须报错而不是静默重建洗掉用户数据（禁止 fallbackToDestructiveMigration）",
+            result.isFailure,
+        )
+        reopened.close()
+        context.deleteDatabase(name)
+    }
 }

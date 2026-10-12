@@ -24,8 +24,11 @@ interface StatsDao {
     @Query("SELECT SUM(calories) FROM training_record WHERE date BETWEEN :f AND :t")
     suspend fun calories(f: Int, t: Int): Double?
 
-    @Query("SELECT COUNT(DISTINCT date) FROM training_record WHERE date BETWEEN :f AND :t")
-    suspend fun trainedDays(f: Int, t: Int): Int
+    /*
+     * 刻意没有 `trainedDays(f,t) = COUNT(DISTINCT date)`：打卡天数由已聚合的
+     * perDay 行数派生（评审 I-2①），两者对 GROUP BY date 严格等价，
+     * 再查一次既浪费又引入与柱状图不同的快照。
+     */
 
     /** 规格 4.6：汇总口径要注明"含 n 条未计算记录" */
     @Query("SELECT COUNT(*) FROM training_record WHERE calories IS NULL AND date BETWEEN :f AND :t")
