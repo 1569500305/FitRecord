@@ -35,10 +35,15 @@ android {
         unitTests {
             isIncludeAndroidResources = true   // Robolectric + Compose UI 测试必需
             isReturnDefaultValues = true
+            // Robolectric + Compose 在默认 512m fork 堆下易 OOM（评审 M-3）
+            all { it.maxHeapSize = "2g" }
         }
     }
-    // SchemaGuardTest 需要能读到导出的 schema JSON
-    sourceSets { getByName("test").assets.srcDirs("$projectDir/schemas") }
+    // SchemaGuardTest 需要能在 test 运行时 classpath 上读到导出的 schema JSON（评审 I-1）
+    // 注意：用 resources 而非 assets（assets.srcDirs 不进 classLoader），
+    // 且测试侧取资源时不带 "schemas/" 前缀 —— 路径为
+    // "com/fitrecord/app/data/db/FitRecordDatabase/1.json"
+    sourceSets { getByName("test").resources.srcDirs("$projectDir/schemas") }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 

@@ -1,10 +1,15 @@
 android/.gradle/
 android/build/
 android/app/build/
+android/.kotlin/
 android/local.properties
 android/keystore.properties
 android/*.keystore
 android/*.jks
+# 密钥库与口令不管落在哪一层都不能入库（评审 M-2）
+keystore.properties
+*.keystore
+*.jks
 .superpowers/
 .idea/
 *.iml
