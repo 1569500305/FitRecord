@@ -11,12 +11,14 @@ import com.fitrecord.app.data.db.dao.ProfileDao
 import com.fitrecord.app.data.db.dao.StatsDao
 import com.fitrecord.app.data.db.dao.TrainingDao
 import com.fitrecord.app.data.db.dao.TypeDao
+import com.fitrecord.app.data.repo.SeedRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * 手写依赖容器（不引 Hilt，见技术选型）。
@@ -40,6 +42,22 @@ class AppContainer(
 
     /** 应用级后台作用域（种子写入、导入等） */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val seedRepo by lazy { SeedRepository(typeDao, foodDao, bodyPartDao) }
+
+    /**
+     * 幂等：表非空则直接返回（Task 6）。
+     * 必须吃掉异常：这是后台作用域上的 fire-and-forget，抛出会变成
+     * 未捕获异常，污染同一进程内后续的单元测试（实测会触发
+     * kotlinx-coroutines-test 的 UncaughtExceptionsBeforeTest）。
+     */
+    fun seedNow() = appScope.launch {
+        try {
+            seedRepo.ensureSeeded()
+        } catch (t: Throwable) {
+            markFatal(t)
+        }
+    }
 
     // ---------- 降级状态（规格 6.9 / 6.10，台账 P5 一次建好）----------
 
