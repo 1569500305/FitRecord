@@ -4,12 +4,15 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.fitrecord.app.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.time.DayOfWeek
 
 private const val FILE_NAME = "fitrecord_settings"
@@ -38,15 +41,28 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val LAST_TYPE = longPreferencesKey("last_exercise_type_id")
     }
 
-    val themeMode: Flow<ThemeMode> = dataStore.data.map { themeOf(it) }
-
-    val firstDayOfWeek: Flow<DayOfWeek> = dataStore.data.map { dayOf(it) }
-
-    val lastExerciseTypeId: Flow<Long?> = dataStore.data.map { it[Keys.LAST_TYPE] }
-
-    fun snapshot(): Flow<AppSettings> = dataStore.data.map {
-        AppSettings(themeOf(it), dayOf(it), it[Keys.LAST_TYPE])
+    /**
+     * 所有读取的唯一上游。DataStore 在文件损坏（写到一半被杀、0 字节、protobuf 解不开）时
+     * 会从 data 流抛 IOException；担心的是"设置坏了 → 启动即崩"，
+     * 所以这里兜住并退回空偏好（等价于回到默认主题 + 周一起始）。
+     * 非 IO 异常（如取消）必须原样抛出，不能吞。
+     */
+    private val prefs: Flow<Preferences> = dataStore.data.catch { error ->
+        if (error is IOException) emit(emptyPreferences()) else throw error
     }
+
+    val themeMode: Flow<ThemeMode> = prefs.map { themeOf(it) }
+
+    val firstDayOfWeek: Flow<DayOfWeek> = prefs.map { dayOf(it) }
+
+    val lastExerciseTypeId: Flow<Long?> = prefs.map { it[Keys.LAST_TYPE] }
+
+    /**
+     * 三者原子一次 emit。UI 侧（Task 24）应当只订阅这一个：
+     * 若 theme 与 firstDayOfWeek 分处两个订阅点，改周起始日时可能出现
+     * "主题已切、周视图首日还没切"的中间帧。
+     */
+    fun snapshot(): Flow<AppSettings> = prefs.map { AppSettings(themeOf(it), dayOf(it), it[Keys.LAST_TYPE]) }
 
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { it[Keys.THEME] = mode.name }
@@ -61,6 +77,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
 
     /** 测试专用：写入无法解析的脏值，验证回落而不是抛 */
+    @androidx.annotation.VisibleForTesting
     suspend fun setRawString(key: String, value: String) {
         dataStore.edit { it[stringPreferencesKey(key)] = value }
     }

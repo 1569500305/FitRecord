@@ -46,12 +46,17 @@ interface StatsDao {
     )
     fun observeRangeRaw(f: Int, t: Int): Flow<List<PerDayRow>>
 
+    /**
+     * 排序追加 typeId 做稳定 tiebreaker（评审 M-3）：
+     * 两个类型分钟数与段数都相等时（同一默认 60 分钟、各 1 段很常见），
+     * 没有全序保证则 Top 6 / "其他" 的切分边界与图例顺序会随写入抖动。
+     */
     @Query(
         """SELECT t.id AS typeId, t.name AS name, t.color AS color,
                   SUM(r.durationMin) AS minutes, COUNT(*) AS segments
            FROM training_record r JOIN exercise_type t ON t.id = r.exerciseTypeId
            WHERE r.date BETWEEN :f AND :t
-           GROUP BY t.id ORDER BY minutes DESC, segments DESC"""
+           GROUP BY t.id ORDER BY minutes DESC, segments DESC, typeId ASC"""
     )
     suspend fun perType(f: Int, t: Int): List<PerTypeRow>
 

@@ -33,8 +33,13 @@ data class StatsPeriod(
     /** 周期天数（不是打卡天数）—— 平均时长的分母，规格 4.6 */
     val dayCount: Int get() = range.last - range.first + 1
 
-    /** 用于禁用"翻到未来"（规格 P2：可回看，不可前进） */
-    val isCurrentOrFuture: Boolean get() = range.last >= LocalDate.now().toEpochDay().toInt()
+    /**
+     * 用于禁用"翻到未来"（规格 P2：可回看，不可前进）。
+     * today 由调用方传入而不是内部读 LocalDate.now()：项目其他地方（Task 14 的 VM）
+     * 都通过注入 clock 拿今天，这里再开一个时间源会让测试依赖墙钟、跨午夜或改时区即红（评审 M-1）。
+     */
+    fun isCurrentOrFuture(today: LocalDate): Boolean =
+        range.last >= today.toEpochDay().toInt()
 }
 
 /** 环形图/饼图的一片 */

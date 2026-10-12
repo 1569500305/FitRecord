@@ -55,14 +55,20 @@ class StatsRepository(
         val from = period.range.first
         val to = period.range.last
 
-        val minutes = statsDao.minutes(from, to)
-        val segments = statsDao.segments(from, to)
+        /*
+         * 总量直接由已聚合的 perDay 派生（评审 I-2①）：
+         * perDay 本身就是 SQL `GROUP BY date` 的结果，再发一次 SUM 既是浪费，
+         * 更会因不在同一快照里而出现"柱状图与总时长对不上"的中间态。
+         * 现在 heat / 柱状 / 段数 / 总时长 / 打卡天数天然同一快照。
+         */
+        val minutes = perDay.sumOf { it.minutes }
+        val segments = perDay.sumOf { it.segments }
         val calories = statsDao.calories(from, to)?.let { Math.round(it).toInt() }
 
         val summary = StatsSummary(
             segments = segments,
             minutes = minutes,
-            trainedDays = statsDao.trainedDays(from, to),
+            trainedDays = perDay.size,
             calories = calories,
             uncalculated = statsDao.uncalculated(from, to),
             // 分母是周期天数（含没练的天），不是打卡天数 —— 规格 4.6
@@ -75,16 +81,17 @@ class StatsRepository(
         val heat = (from..to).map { segmentsByDay[it] ?: 0 }
 
         val typeRows = statsDao.perType(from, to)
-        val totalMinutes = typeRows.sumOf { it.minutes }.coerceAtLeast(1)
-        val top = typeRows.take(TOP_TYPES).map {
-            SliceStats(it.name, it.color, it.minutes, it.segments, it.minutes * 100f / totalMinutes)
-        }
-        val tail = typeRows.drop(TOP_TYPES)
-        val byType = if (tail.isEmpty()) {
-            top
+        val totalMinutes = typeRows.sumOf { it.minutes }
+        // 有记录但总时长为 0（导入路径可送）时不得发一张每片 0% 的空饼（评审 M-2）
+        val byType = if (totalMinutes <= 0) {
+            emptyList()
         } else {
-            // 第 7 名以后并入"其他"，环形图扇区数才有上限（规格 2.5）
-            top + SliceStats(
+            val top = typeRows.take(TOP_TYPES).map {
+                SliceStats(it.name, it.color, it.minutes, it.segments, it.minutes * 100f / totalMinutes)
+            }
+            val tail = typeRows.drop(TOP_TYPES)
+            if (tail.isEmpty()) top else top + SliceStats(
+                // 第 7 名以后并入"其他"，环形图扇区数才有上限（规格 2.5）
                 name = OTHERS,
                 color = ColorOthers.toRgbLong(),
                 minutes = tail.sumOf { it.minutes },

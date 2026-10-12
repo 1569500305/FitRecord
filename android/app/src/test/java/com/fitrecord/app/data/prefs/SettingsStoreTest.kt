@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.fitrecord.app.ui.theme.ThemeMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -27,16 +28,22 @@ import java.time.DayOfWeek
 @Config(sdk = [34])
 class SettingsStoreTest {
 
-    private fun storeFor(name: String): SettingsStore {
+    /** 一个用例一套 (scope, file, store)；scope 保留是为了能"关掉再重开同一个文件" */
+    private class Harness(val file: File, val scope: CoroutineScope, val settings: SettingsStore)
+
+    private fun harness(name: String, wipe: Boolean = true): Harness {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val file: File = context.preferencesDataStoreFile(name)
-        file.delete()
+        val file = context.preferencesDataStoreFile(name)
+        if (wipe) file.delete()
+        val scope = CoroutineScope(Job() + kotlinx.coroutines.Dispatchers.IO)
         val ds: DataStore<Preferences> = PreferenceDataStoreFactory.create(
-            scope = CoroutineScope(Job() + kotlinx.coroutines.Dispatchers.IO),
+            scope = scope,
             produceFile = { file },
         )
-        return SettingsStore(ds)
+        return Harness(file, scope, SettingsStore(ds))
     }
+
+    private fun storeFor(name: String): SettingsStore = harness(name).settings
 
     @Test fun `defaults are follow-system, monday, and no last type`() = runBlocking {
         val s = storeFor("t_defaults").snapshot().first()
@@ -88,6 +95,55 @@ class SettingsStoreTest {
         assertTrue("设置未落盘：$file 不存在", file.exists())
         assertTrue("设置文件为空，写入只在内存里", file.length() > 0)
         assertEquals(DayOfWeek.SUNDAY, s.firstDayOfWeek.first())
+    }
+
+    /**
+     * 评审 I-4：真正的"重启后读得回"守护。DataStore 把实例注册表挂在文件上，
+     * 但它的生命周期跟着传入的 scope 走 —— 取消那个 scope 后，同一个 File
+     * 可以由新 scope 重新打开，等价于进程重启。
+     */
+    @Test fun `settings survive a closed and reopened store on the same file`() = runBlocking {
+        val first = harness("t_reopen")
+        first.settings.setThemeMode(ThemeMode.DARK)
+        first.settings.setFirstDayOfWeek(DayOfWeek.SUNDAY)
+        first.settings.setLastExerciseTypeId(11L)
+        first.scope.cancel()
+        first.scope.coroutineContext[Job]!!.join()   // 等旧 store 真的释放完文件再重开
+
+        val secondScope = CoroutineScope(Job() + kotlinx.coroutines.Dispatchers.IO)
+        val secondDs: DataStore<Preferences> = PreferenceDataStoreFactory.create(
+            scope = secondScope,
+            produceFile = { first.file },
+        )
+        val reopened = SettingsStore(secondDs).snapshot().first()
+
+        assertEquals("重启后主题丢了", ThemeMode.DARK, reopened.themeMode)
+        assertEquals("重启后周起始日丢了", DayOfWeek.SUNDAY, reopened.firstDayOfWeek)
+        assertEquals(11L, reopened.lastExerciseTypeId)
+        secondScope.cancel()
+    }
+
+    /**
+     * 评审 I-1：设置文件损坏（写到一半被杀、乱码字节）时，读取必须退回默认值而不是抛。
+     * 否则 Task 24 把 snapshot() 接进 MainActivity 后，就是"设置坏了 → 启动即崩"。
+     */
+    @Test fun `corrupt settings file falls back to defaults instead of throwing`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val file = context.preferencesDataStoreFile("t_corrupt")
+        file.parentFile?.mkdirs()
+        file.writeBytes(byteArrayOf(0x00, 0x01, 0x02, 0x7F, 0x2A, 0x2A, 0x2A))
+
+        val scope = CoroutineScope(Job() + kotlinx.coroutines.Dispatchers.IO)
+        val ds: DataStore<Preferences> = PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = { file },
+        )
+        val snapshot = SettingsStore(ds).snapshot().first()
+
+        assertEquals(ThemeMode.SYSTEM, snapshot.themeMode)
+        assertEquals(DayOfWeek.MONDAY, snapshot.firstDayOfWeek)
+        assertEquals(null, snapshot.lastExerciseTypeId)
+        scope.cancel()
     }
 
     @Test fun `last exercise type round trips`() = runBlocking {

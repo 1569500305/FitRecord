@@ -71,8 +71,13 @@ abstract class FitRecordDatabase : RoomDatabase() {
             }
         }
 
-        fun build(context: Context): FitRecordDatabase =
-            Room.databaseBuilder(context.applicationContext, FitRecordDatabase::class.java, DB_NAME)
+        /**
+         * name 默认就是生产库名，参数化只为让测试能开一个独立文件走**同一条 builder 链路**
+         * （含 addCallback 与 addMigrations），从而验证"重开不丢数据"（评审 I-4）。
+         * 不要用 inMemoryDatabaseBuilder 代替：它绕过了 addMigrations，测不到升级行为。
+         */
+        fun build(context: Context, name: String = DB_NAME): FitRecordDatabase =
+            Room.databaseBuilder(context.applicationContext, FitRecordDatabase::class.java, name)
                 .addCallback(META_STAMP_CALLBACK)
                 .addMigrations(*MIGRATIONS)
                 .build()
