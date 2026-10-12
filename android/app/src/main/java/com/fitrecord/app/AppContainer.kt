@@ -11,6 +11,7 @@ import com.fitrecord.app.data.db.dao.ProfileDao
 import com.fitrecord.app.data.db.dao.StatsDao
 import com.fitrecord.app.data.db.dao.TrainingDao
 import com.fitrecord.app.data.db.dao.TypeDao
+import com.fitrecord.app.data.prefs.SettingsStore
 import com.fitrecord.app.data.repo.SeedRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,7 @@ import kotlinx.coroutines.launch
  * 暴露 database 为 internal 是台账 P9 裁决：BackupRepository 需要 db.withTransaction。
  */
 class AppContainer(
-    appContext: Context,
+    private val appContext: Context,
     overrideDb: FitRecordDatabase? = null,
 ) {
     internal val database: FitRecordDatabase =
@@ -44,6 +45,9 @@ class AppContainer(
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val seedRepo by lazy { SeedRepository(typeDao, foodDao, bodyPartDao) }
+
+    /** 主题模式 / 周起始日 / 最近使用类型（Task 10） */
+    val settings: SettingsStore by lazy { SettingsStore.from(appContext) }
 
     /**
      * 幂等：表非空则直接返回（Task 6）。
