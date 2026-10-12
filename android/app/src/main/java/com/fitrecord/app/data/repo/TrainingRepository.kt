@@ -44,6 +44,24 @@ class TrainingRepository(
         val bodyPartIds: List<Long>,
     )
 
+    /** setTrainedToday 的结果，四种语义互斥（复审 S-1） */
+    enum class TodayToggle {
+        /** 本次开关新增了一段默认 60 分钟记录 */
+        Marked,
+
+        /** 本次开关清空了当日记录 */
+        Cleared,
+
+        /** 打开时当日已有记录，未做变更 */
+        AlreadyMarked,
+
+        /** 关闭时当日本就没有记录，未做变更 */
+        AlreadyUnmarked,
+
+        /** 类型表为空（种子未就绪），UI 应提示重试而不是崩（评审 M-6） */
+        NoTypesAvailable,
+    }
+
     /** 当日记录（P4 主数据源）。记录与关联各一条查询，随写入自动 re-emit */
     fun observeDay(date: LocalDate): Flow<List<DayRecord>> {
         val day = date.epochDay()
@@ -139,15 +157,21 @@ class TrainingRepository(
      * 规格 P4 的"今日已健身"开关。
      * 开：当日无记录时补一条默认 60 分钟（类型取启用列表首个，即内置划船机）；
      *     用户"最近使用类型"由 SettingsStore 记录，只用于 P5 编辑器默认选中（台账 P1）。
-     * 关：单语句清空当日，返回真实删除行数（评审 I-3）。
-     * 返回 -1 表示类型表为空（种子未就绪），UI 应提示稍后重试而不是崩溃（评审 M-6）。
+     * 关：单语句清空当日（评审 I-3）。
+     *
+     * 返回枚举而不是 Int（复审 S-1）：一个整数同时承载"删了几条"与"失败哨兵 -1"
+     * 会让 P4 的提示文案失真，语义必须互斥。
      */
-    suspend fun setTrainedToday(date: LocalDate, trained: Boolean): Int {
-        if (!trained) return trainingDao.deleteByDay(date.epochDay())
-        if (dayRecords(date).isNotEmpty()) return 0
-        val typeId = typeDao.observeActive().first().firstOrNull()?.id ?: return -1
+    suspend fun setTrainedToday(date: LocalDate, trained: Boolean): TodayToggle {
+        if (!trained) {
+            return if (trainingDao.deleteByDay(date.epochDay()) > 0) TodayToggle.Cleared else TodayToggle.AlreadyUnmarked
+        }
+        if (trainingDao.rangeOnce(date.epochDay(), date.epochDay()).isNotEmpty()) {
+            return TodayToggle.AlreadyMarked
+        }
+        val typeId = typeDao.observeActive().first().firstOrNull()?.id ?: return TodayToggle.NoTypesAvailable
         add(date, typeId, durationMin = 60, bodyPartIds = defaultBodyParts(typeId), note = "")
-        return 1
+        return TodayToggle.Marked
     }
 
     suspend fun dayNote(date: LocalDate): String = noteDao.note(date.epochDay())?.text.orEmpty()
@@ -160,7 +184,11 @@ class TrainingRepository(
 
     // ---------- 内部 ----------
 
-    /** 记录列表 + 一次性取回的关联列表 → 展示模型。全程两条查询 */
+    /**
+     * 记录列表 + 一次性取回的关联列表 → 展示模型。全程两条查询。
+     * 部位顺序由 SQL 的 `ORDER BY rb.bodyPartId` 决走；V1 中 sortOrder == id 所以等价，
+     * V1.1 开放自定义部位后如需按 sortOrder 排，在这里加一次投影（复审 S-3）。
+     */
     private fun assemble(
         date: LocalDate,
         rows: List<RecordWithType>,

@@ -18,4 +18,11 @@ interface FoodDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<FoodItemEntity>)
+
+    /**
+     * 种子专用 IGNORE。food_item 目前没有入向外键，REPLACE 也不会丢数据，
+     * 但与 BodyPartDao.insertSeedAll 保持同一口径，避免将来给食物表加引用关系时踩同一个坑。
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSeedAll(items: List<FoodItemEntity>)
 }

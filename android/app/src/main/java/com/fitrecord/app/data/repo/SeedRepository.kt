@@ -17,8 +17,8 @@ import com.fitrecord.app.ui.theme.toRgbLong
  * 策略是**无条件全量写入 + 冲突忽略**，不是"表空才写"（评审 I-5）：
  *  - 幂等：重复调用不产生重复行；
  *  - 可自愈：上次写到一半失败（进程被杀、磁盘满），下次启动会补齐缺的类型；
- *  - 不覆盖用户改动：exercise_type 靠 name 唯一索引 IGNORE 跳过已存在行，
- *    用户改过的 MET 不会被启动打回。
+ *  - 不覆盖用户改动：三张表均用 IGNORE，已存在行直接跳过；
+ *  - 不删行：绝不用 REPLACE，否则 CASCADE 会清空历史部位关联。
  */
 class SeedRepository(
     private val typeDao: TypeDao,
@@ -40,10 +40,12 @@ class SeedRepository(
                 )
             }
         )
-        // 部位与食物固定主键 + REPLACE，天然幂等且可自愈；V1 这两张表不可用户编辑
-        bodyPartDao.insertAll(
+        // 部位与食物一律用 IGNORE 而不是 REPLACE：REPLACE 会先隐式 DELETE 再插入，
+        // 而 record_body_part 对 body_part.id 有 ON DELETE CASCADE，
+        // 用 REPLACE 会导致每次冷启动级联清空用户全部部位关联（复审 Critical）。
+        bodyPartDao.insertSeedAll(
             BodyParts.items.map { (id, name) -> BodyPartEntity(id, name, id.toInt()) }
         )
-        foodDao.insertAll(Foods.items)
+        foodDao.insertSeedAll(Foods.items)
     }
 }

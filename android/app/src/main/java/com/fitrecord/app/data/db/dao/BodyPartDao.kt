@@ -21,4 +21,12 @@ interface BodyPartDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entities: List<BodyPartEntity>)
+
+    /**
+     * 种子专用。**绝不能用 REPLACE**：SQLite 的 INSERT OR REPLACE 会先隐式 DELETE 再插入，
+     * 而 record_body_part.bodyPartId 带 ON DELETE CASCADE —— 每次冷启动会级联清空
+     * 用户全部历史部位关联（复审 Critical）。IGNORE 只补齐缺行、不动已有行。
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSeedAll(entities: List<BodyPartEntity>)
 }

@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.fitrecord.app.data.db.FitRecordDatabase
 import com.fitrecord.app.data.db.entity.ExerciseTypeEntity
+import com.fitrecord.app.data.db.entity.TrainingRecordEntity
 import com.fitrecord.app.data.db.seed.BodyParts
 import com.fitrecord.app.data.db.seed.BuiltinExercises
 import com.fitrecord.app.data.db.seed.Foods
@@ -12,11 +13,11 @@ import com.fitrecord.app.ui.theme.ExercisePalette
 import com.fitrecord.app.ui.theme.toRgbLong
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.time.LocalDate
 
 /**
  * 种子写入的三条硬保证（评审 I-5 / I-6）：
@@ -79,16 +80,47 @@ class SeedRepositoryTest {
         assertEquals(BuiltinExercises.items.size, db.typeDao().all().size)
     }
 
-    @Test fun `archived custom type is not resurrected as builtin`() = runBlocking {
+    /**
+     * 回归测试（复审 Critical）：种子绝不得碰用户已有的部位关联。
+     * 上一轮把 body_part 改成 INSERT OR REPLACE，而 SQLite 的 REPLACE 会先隐式 DELETE
+     * 再插入，触发 record_body_part 的 ON DELETE CASCADE —— 每次冷启动会清空全部
+     * 历史部位关联。旧91 条测试全部在"建库即种子、库里还没记录"的场景跑，完全照不到。
+     */
+    @Test fun `reseeding never wipes existing body part links`() = runBlocking {
         seed.ensureSeeded()
-        val custom = db.typeDao().insertType("攀岩", 8.0, 0xFF123456L, isBuiltin = false, sortOrder = 99)
-        db.typeDao().archive(custom)
+        val typeId = db.typeDao().byName("划船机")!!.id
+        val recordId = db.trainingDao().insertWithBodyParts(
+            TrainingRecordEntity(
+                date = LocalDate.of(2026, 10, 12).toEpochDay().toInt(),
+                exerciseTypeId = typeId, durationMin = 45, calories = 368.0,
+                note = "", createdAt = 1L, updatedAt = 1L,
+            ),
+            listOf(2L, 5L),
+        )
+        assertEquals(2, db.trainingDao().linksOf(recordId).size)
+
+        // 模拟冷启动：再跑两次种子
+        seed.ensureSeeded()
+        seed.ensureSeeded()
+
+        assertEquals("种子不得丢失已有部位关联", 2, db.trainingDao().linksOf(recordId).size)
+        assertEquals(1, db.trainingDao().rangeOnce(0, Int.MAX_VALUE).size)
+        assertEquals(BuiltinExercises.items.size, db.typeDao().all().size)
+        assertEquals(BodyParts.items.size, db.bodyPartDao().all().size)
+    }
+
+    /** 原"自定义类型不被复活"是同义反复（攀岩不在内置表里，种子永远碰不到），改测内置项 */
+    @Test fun `archived builtin stays archived after a later seed run`() = runBlocking {
+        seed.ensureSeeded()
+        val yoga = db.typeDao().byName("瑜伽")!!
+        db.typeDao().archive(yoga.id)
 
         seed.ensureSeeded()
 
-        val after = db.typeDao().byId(custom)!!
-        assertEquals("种子不得改用户的归档决定", true, after.archived)
-        assertEquals(false, after.isBuiltin)
+        val after = db.typeDao().byName("瑜伽")!!
+        assertEquals("种子不得替用户解档", true, after.archived)
+        assertEquals(true, after.isBuiltin)
+        assertEquals(BuiltinExercises.items.size, db.typeDao().all().size)
     }
 
     @Test fun `builtin colors come from the palette at the declared index`() = runBlocking {
@@ -105,6 +137,5 @@ class SeedRepositoryTest {
         val types = db.typeDao().all()
         assertEquals(BuiltinExercises.items.map { it.name }, types.map { it.name })
         assertEquals(types.indices.toList(), types.map { it.sortOrder })
-        assertNotNull(types.first().defaultBodyPartIds)
     }
 }

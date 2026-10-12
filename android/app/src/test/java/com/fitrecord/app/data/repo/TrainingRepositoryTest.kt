@@ -48,7 +48,7 @@ class TrainingRepositoryTest {
         val id = repo.add(day, exerciseTypeId = 1, durationMin = 45, bodyPartIds = listOf(2, 5), note = "x")
         val r = repo.dayRecords(day).first { it.id == id }
         assertEquals(368.0, r.calories!!, 1e-9)          // 7.0 × 70 × 0.75 → 368
-        assertEquals(listOf(2L, 5L), r.bodyPartIds)      // 按 sortOrder 返回
+        assertEquals(listOf(2L, 5L), r.bodyPartIds)      // 由 SQL ORDER BY bodyPartId（V1 中 sortOrder == id）
         assertEquals("划船机", r.type.name)
         assertEquals(day, r.date)
     }
@@ -93,24 +93,34 @@ class TrainingRepositoryTest {
         assertNull(repo.delete(999_999L))
     }
 
-    @Test fun `setTrainedToday false clears the day and reports how many were removed`() = runBlocking {
+    @Test fun `setTrainedToday false clears the day and reports Cleared`() = runBlocking {
         repo.add(day, 1, 30, emptyList(), "")
         repo.add(day, 2, 30, emptyList(), "")
-        assertEquals(2, repo.setTrainedToday(day, trained = false))
+        assertEquals(TrainingRepository.TodayToggle.Cleared, repo.setTrainedToday(day, trained = false))
         assertTrue(repo.dayRecords(day).isEmpty())
     }
 
+    @Test fun `setTrainedToday false on an empty day is a no-op`() = runBlocking {
+        assertEquals(
+            TrainingRepository.TodayToggle.AlreadyUnmarked,
+            repo.setTrainedToday(day, trained = false),
+        )
+    }
+
     @Test fun `setTrainedToday true creates exactly one default 60min record`() = runBlocking {
-        repo.setTrainedToday(day, trained = true)
+        assertEquals(TrainingRepository.TodayToggle.Marked, repo.setTrainedToday(day, trained = true))
         val records = repo.dayRecords(day)
         assertEquals(1, records.size)
         assertEquals(60, records.single().durationMin)
         assertEquals("划船机", records.single().type.name)   // 启用列表首个（sortOrder=0）
     }
 
-    @Test fun `setTrainedToday true on a trained day is a no-op`() = runBlocking {
+    @Test fun `setTrainedToday true on a trained day is AlreadyMarked`() = runBlocking {
         repo.add(day, 1, 30, emptyList(), "")
-        repo.setTrainedToday(day, trained = true)
+        assertEquals(
+            TrainingRepository.TodayToggle.AlreadyMarked,
+            repo.setTrainedToday(day, trained = true),
+        )
         assertEquals(1, repo.dayRecords(day).size)
     }
 
