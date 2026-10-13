@@ -73,6 +73,11 @@ class ViewModelFactoryTest {
         assertTrue(vm is AppearanceViewModel)
     }
 
+    @Test fun `backup factory returns BackupViewModel`() {
+        val vm = BackupViewModel.factory(container).createFor(BackupViewModel::class.java)
+        assertTrue(vm is BackupViewModel)
+    }
+
     /*
      * 刻意不写“VM 首帧就能交出完整状态”这类断言：
      * viewModelScope 是 Dispatchers.Main.immediate，在 runBlocking 里主线程被阻，

@@ -68,7 +68,7 @@ fun FitRecordRoot() {
             composable(Nav.PROFILE) { ProfileScreen(nav) }
             composable(Nav.BODY) { BodyProfileScreen(nav) }
             composable(Nav.TYPE_LIST) { TypeListScreen(nav) }
-            composable(Nav.BACKUP) { ComingSoonScreen("数据备份（接线中）") }
+            composable(Nav.BACKUP) { BackupScreen(nav) }
             composable(Nav.APPEARANCE) { AppearanceScreen(nav) }
             composable(Nav.DAY) { entry ->
                 DayRecordScreen(nav, Nav.epochDayOf(entry.arguments?.getString(Nav.ARG_DATE)))

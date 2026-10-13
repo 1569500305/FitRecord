@@ -12,9 +12,12 @@ import com.fitrecord.app.data.db.dao.StatsDao
 import com.fitrecord.app.data.db.dao.TrainingDao
 import com.fitrecord.app.data.db.dao.TypeDao
 import com.fitrecord.app.data.prefs.SettingsStore
+import com.fitrecord.app.data.repo.BackupRepository
 import com.fitrecord.app.data.repo.SeedRepository
 import com.fitrecord.app.data.repo.StatsRepository
 import com.fitrecord.app.data.repo.TrainingRepository
+import com.fitrecord.app.ui.theme.ExercisePalette
+import com.fitrecord.app.ui.theme.toRgbLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,6 +59,24 @@ class AppContainer(
         TrainingRepository(trainingDao, typeDao, profileDao, noteDao, foodDao)
     }
     val statsRepo by lazy { StatsRepository(statsDao, foodDao) }
+
+    /**
+     * 备份导入导出（Task 23）。db.withTransaction 需持有 database（台账 P9 已把 database 提为 internal）。
+     * 取色调色板由组合根注入，让 BackupRepository 停留在 data 层、不反向依赖 ui（评审前瞻）。
+     */
+    val backupRepo by lazy {
+        BackupRepository(
+            db = database,
+            trainingDao = trainingDao,
+            typeDao = typeDao,
+            profileDao = profileDao,
+            noteDao = noteDao,
+            bodyPartDao = bodyPartDao,
+            foodDao = foodDao,
+            metaDao = metaDao,
+            colorForNewType = { id -> ExercisePalette.colorForId(id).toRgbLong() },
+        )
+    }
 
     /**
      * 幂等：表非空则直接返回（Task 6）。
