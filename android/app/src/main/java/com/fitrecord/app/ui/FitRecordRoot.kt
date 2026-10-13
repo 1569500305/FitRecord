@@ -71,12 +71,15 @@ fun FitRecordRoot() {
             composable(Nav.BACKUP) { ComingSoonScreen("数据备份（接线中）") }
             composable(Nav.APPEARANCE) { ComingSoonScreen("外观（接线中）") }
             composable(Nav.DAY) { entry ->
-                val date = Nav.epochDayOf(entry.arguments?.getString(Nav.ARG_DATE))
-                ComingSoonScreen("当日记录 ${date}（接线中）")
+                DayRecordScreen(nav, Nav.epochDayOf(entry.arguments?.getString(Nav.ARG_DATE)))
             }
             composable(Nav.RECORD) { entry ->
-                val date = Nav.epochDayOf(entry.arguments?.getString(Nav.ARG_DATE))
-                ComingSoonScreen("记录编辑 ${date}（接线中）")
+                val args = entry.arguments
+                RecordEditorScreen(
+                    nav = nav,
+                    date = Nav.epochDayOf(args?.getString(Nav.ARG_DATE)),
+                    recordId = args?.getString(Nav.ARG_ID)?.toLongOrNull() ?: -1L,
+                )
             }
             composable(Nav.TYPE_EDIT) { ComingSoonScreen("类型编辑（接线中）") }
         }
