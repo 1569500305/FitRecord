@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.fitrecord.app.data.db.FitRecordDatabase
+import com.fitrecord.app.data.db.entity.DailyNoteEntity
 import com.fitrecord.app.data.db.entity.UserProfileEntity
 import com.fitrecord.app.domain.backup.BackupCodec
 import com.fitrecord.app.domain.backup.BackupFile
@@ -51,7 +52,6 @@ class BackupRepositoryTest {
             profileDao = db.profileDao(),
             noteDao = db.noteDao(),
             bodyPartDao = db.bodyPartDao(),
-            foodDao = db.foodDao(),
             metaDao = db.metaDao(),
             colorForNewType = { 0xFF123456L },
         )
@@ -130,5 +130,48 @@ class BackupRepositoryTest {
         val p = backup.preview(ByteArrayInputStream(out.toByteArray()), ConflictPolicy.SKIP)
         assertEquals(1, p.toInsert)
         assertEquals(0, db.trainingDao().rangeOnce(0, Int.MAX_VALUE).size)
+    }
+
+    /** 评审 I-4：JSON 不只是记录表 —— 身体参数必须随导入恢复（换手机场景） */
+    @Test fun `import restores profile when local has none`() = runBlocking {
+        training.add(day, 1, 45, listOf(2), "")
+        val out = ByteArrayOutputStream()
+        backup.exportJson(out)
+        db.trainingDao().deleteAll()
+        db.profileDao().delete()
+        val r = backup.apply(ByteArrayInputStream(out.toByteArray()), ConflictPolicy.SKIP)
+        assertEquals(1, r.inserted)
+        assertNotNull(db.profileDao().profile())
+        assertEquals(70.0, db.profileDao().profile()!!.weightKg, 1e-9)
+    }
+
+    /** 评审 I-4：当日备注也必须随 JSON 恢复 */
+    @Test fun `import restores daily notes`() = runBlocking {
+        val dayInt = day.toEpochDay().toInt()
+        db.noteDao().upsert(DailyNoteEntity(dayInt, "今天状态好", 0))
+        training.add(day, 1, 45, listOf(2), "")
+        val out = ByteArrayOutputStream()
+        backup.exportJson(out)
+        db.trainingDao().deleteAll()
+        db.noteDao().delete(dayInt)
+        backup.apply(ByteArrayInputStream(out.toByteArray()), ConflictPolicy.SKIP)
+        assertEquals("今天状态好", db.noteDao().note(dayInt)?.text)
+    }
+
+    /** 评审 I-5：同键重复行不得把多条来记录全打在同一个 id 上、也不得计数虚高 */
+    @Test fun `overwrite does not overcount when more incoming rows than existing duplicates`() = runBlocking {
+        training.add(day, 1, 45, listOf(2), "")   // 仅 1 条现有
+        val incoming = BackupCodec.toJson(
+            BackupFile(
+                BackupCodec.CURRENT_VERSION, "", null, emptyList(),
+                listOf(
+                    RecordDto(day.toString(), "划船机", 7.0, 45, 111.0, emptyList(), ""),
+                    RecordDto(day.toString(), "划船机", 7.0, 45, 222.0, emptyList(), ""),
+                ),
+            ),
+        )
+        val r = backup.apply(ByteArrayInputStream(incoming.toByteArray(Charsets.UTF_8)), ConflictPolicy.OVERWRITE)
+        assertEquals(1, r.updated)                  // 只有 1 个真实行可被更新，第二条不重复计
+        assertEquals(1, db.trainingDao().rangeOnce(0, Int.MAX_VALUE).size)
     }
 }

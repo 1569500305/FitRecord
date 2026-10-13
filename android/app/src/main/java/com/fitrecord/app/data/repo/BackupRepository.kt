@@ -2,8 +2,8 @@ package com.fitrecord.app.data.repo
 
 import androidx.room.withTransaction
 import com.fitrecord.app.data.db.FitRecordDatabase
+import com.fitrecord.app.data.db.MetaKeys
 import com.fitrecord.app.data.db.dao.BodyPartDao
-import com.fitrecord.app.data.db.dao.FoodDao
 import com.fitrecord.app.data.db.dao.MetaDao
 import com.fitrecord.app.data.db.dao.NoteDao
 import com.fitrecord.app.data.db.dao.ProfileDao
@@ -13,6 +13,7 @@ import com.fitrecord.app.data.db.entity.DailyNoteEntity
 import com.fitrecord.app.data.db.entity.ExerciseTypeEntity
 import com.fitrecord.app.data.db.entity.MetaEntity
 import com.fitrecord.app.data.db.entity.TrainingRecordEntity
+import com.fitrecord.app.data.db.entity.UserProfileEntity
 import com.fitrecord.app.domain.CalorieCalculator
 import com.fitrecord.app.domain.backup.BackupCodec
 import com.fitrecord.app.domain.backup.BackupFile
@@ -34,11 +35,10 @@ import java.util.Locale
  * 备份导出 / 导入（规格模块4-3 / 4.7 / 6.5）。
  *
  * 依赖方向（评审前瞻）：本类在 data 层，**不反向 import ui**。新建自定义类型所需的
- * 取色逻辑由组合根（AppContainer）以 [colorForNewType] 注入；时间源 [clock] 同理，
- * 便于测试里传固定值（与 CalendarViewModel 的 clock 口径一致）。
+ * 取色逻辑由组合根（AppContainer）以 [colorForNewType] 注入。
  *
- * 导入全程包在 [FitRecordDatabase.withTransaction] 里：任一行的类型创建或写入抛错，
- * 整批回滚，不留"半截备份"（规格 6.5 的"要么全成要么全不动"）。
+ * 导入全程包在 [FitRecordDatabase.withTransaction] 里：类型创建、记录写入、身体参数与
+ * 备注恢复都在**同一事务**，任一抛错整批回滚，不留"半截备份"（规格 6.5）。
  */
 class BackupRepository(
     private val db: FitRecordDatabase,
@@ -47,10 +47,8 @@ class BackupRepository(
     private val profileDao: ProfileDao,
     private val noteDao: NoteDao,
     private val bodyPartDao: BodyPartDao,
-    private val foodDao: FoodDao,
     private val metaDao: MetaDao,
     private val colorForNewType: (Long) -> Long,
-    private val clock: () -> LocalDate = LocalDate::now,
 ) {
 
     /** 预览：只统计不落库（规格 6.5，用户先看清再确认） */
@@ -116,7 +114,7 @@ class BackupRepository(
 
     /** 预览一段备份将产生什么效果，不写库 */
     suspend fun preview(stream: InputStream, policy: ConflictPolicy): MergePreview {
-        val plan = MergeResolver.resolve(incoming(stream), existingDtos(), policy)
+        val plan = MergeResolver.resolve(parsed(stream).records, existingDtos(), policy)
         return MergePreview(
             total = plan.total,
             toInsert = plan.toInsert.size,
@@ -130,7 +128,7 @@ class BackupRepository(
     suspend fun apply(stream: InputStream, policy: ConflictPolicy): MergeOutcome =
         applyInternal(stream, policy, strict = false)
 
-    /** 遇错即抛、整批回滚；仅测试用于验证事务原子性（评审：导入不得留半截） */
+    /** 解析/校验阶段遇脏行即抛、整批不进入写入；仅测试用于验证不留半截 */
     suspend fun applyStrict(stream: InputStream, policy: ConflictPolicy): MergeOutcome =
         applyInternal(stream, policy, strict = true)
 
@@ -139,39 +137,64 @@ class BackupRepository(
         policy: ConflictPolicy,
         strict: Boolean,
     ): MergeOutcome {
+        val parsed = parsed(stream)
         val existing = existingRows()
-        val plan = MergeResolver.resolve(incoming(stream), existing.map { it.first }, policy)
+        val plan = MergeResolver.resolve(parsed.records, existing.map { it.first }, policy)
         if (strict && plan.errors.isNotEmpty()) {
-            // 在开事务之前抛出：根本不产生任何写，回滚语义等价于此
+            // 在开事务之前就拒绝：整批不进入写入，杜绝"半截备份"（规格 6.5）
             throw IllegalStateException("导入存在无法解析的行：${plan.errors.first()}")
         }
 
         var inserted = 0
         var updated = 0
         db.withTransaction {
-            // 1) 先建缺失的运动类型（记录的外键 RESTRICT 要求父行先存在）
+            // 1) 先补建运动类型：文件里显式声明的（含 archived）+ 记录引用的未知类型；
+            //    记录的外键 RESTRICT 要求父类型先存在。
+            for (t in parsed.exerciseTypes) {
+                if (typeDao.byName(t.name) == null) createType(t.name, t.met, t.archived)
+            }
             for (t in plan.newTypes) {
                 if (typeDao.byName(t.name) == null) createType(t.name, t.met)
             }
-            // 2) 新增
+            // 2) 覆盖更新：训练记录表无唯一约束，同键可能有多行；用"键 → 待消费 id 队列"
+            //    逐条配对，避免把多条更新全打在同一个 id 上、其余永不刷新（评审 I-5）。
+            val idsByKey = existing
+                .groupBy({ MergeResolver.keyOf(it.first) }, { it.second })
+                .mapValues { it.value.toMutableList() }
+            if (policy == ConflictPolicy.OVERWRITE) {
+                for (dto in plan.toUpdate) {
+                    val id = idsByKey[MergeResolver.keyOf(dto)]?.removeFirstOrNull()
+                    if (id != null && updateRecord(id, dto)) updated++
+                }
+            }
+            // 3) 新增
             for (dto in plan.toInsert) {
                 insertRecord(dto)
                 inserted++
             }
-            // 3) 覆盖更新：按幂等键找回原行，仅刷新派生字段与部位（键内字段本就相同）
-            if (policy == ConflictPolicy.OVERWRITE) {
-                val byKey = existing.associate { MergeResolver.keyOf(it.first) to it.second }
-                for (dto in plan.toUpdate) {
-                    val id = byKey[MergeResolver.keyOf(dto)] ?: continue
-                    updateRecord(id, dto)
-                    updated++
+            // 4) 恢复身体参数：仅当本机还没有时写入，不覆盖用户当前体重
+            //    （评审 I-4：JSON 不只是记录表，换手机恢复必须带身体参数）。
+            parsed.profile?.let { p ->
+                if (profileDao.profile() == null) {
+                    profileDao.upsert(
+                        UserProfileEntity(
+                            id = 0, gender = p.gender, age = p.age, heightCm = p.heightCm,
+                            weightKg = p.weightKg, weeklyGoal = 0, updatedAt = System.currentTimeMillis(),
+                        )
+                    )
                 }
             }
-            // 4) 导入日志（规格 P9：最多读回 5 条）
+            // 5) 恢复每日备注：SKIP 保留本机已有非空备注，OVERWRITE 覆盖
+            for (n in parsed.dailyNotes) {
+                val day = LocalDate.parse(n.date.trim()).toEpochDay().toInt()
+                if (policy == ConflictPolicy.SKIP && noteDao.note(day)?.text?.isNotBlank() == true) continue
+                noteDao.upsert(DailyNoteEntity(day, n.text, System.currentTimeMillis()))
+            }
+            // 6) 导入日志（统一用 MetaKeys.LAST_IMPORT，值含四类计数）
             metaDao.put(
                 MetaEntity(
-                    KEY_LAST_IMPORT,
-                    "${System.currentTimeMillis()}|${plan.toInsert.size}|${plan.skipped}|${plan.errors.size}",
+                    MetaKeys.LAST_IMPORT,
+                    "${System.currentTimeMillis()}|$inserted|$updated|${plan.skipped}|${plan.errors.size}",
                 )
             )
         }
@@ -200,8 +223,8 @@ class BackupRepository(
         )
     }
 
-    private suspend fun updateRecord(id: Long, dto: RecordDto) {
-        val entity = trainingDao.byId(id) ?: return
+    private suspend fun updateRecord(id: Long, dto: RecordDto): Boolean {
+        val entity = trainingDao.byId(id) ?: return false
         val day = LocalDate.parse(dto.date.trim()).toEpochDay().toInt()
         val typeId = resolveTypeId(dto.exercise.trim(), dto.met)
         val kcal = dto.calories ?: CalorieCalculator.kcal(dto.met, profileDao.profile()?.weightKg, dto.durationMin)
@@ -216,6 +239,7 @@ class BackupRepository(
             ),
             bodyPartIds = resolvePartIds(dto.bodyParts),
         )
+        return true
     }
 
     /** 类型名 → id；不存在则新建（自定义、非内置、按注入的调色板取色，规格 4.7） */
@@ -224,10 +248,10 @@ class BackupRepository(
         return createType(name, met)
     }
 
-    private suspend fun createType(name: String, met: Double): Long {
+    private suspend fun createType(name: String, met: Double, archived: Boolean = false): Long {
         val sortOrder = typeDao.all().size + SORT_ORDER_BASE
         val entity = ExerciseTypeEntity(
-            name = name, met = met, color = 0L, isBuiltin = false, sortOrder = sortOrder,
+            name = name, met = met, color = 0L, isBuiltin = false, archived = archived, sortOrder = sortOrder,
         )
         val newId = typeDao.insert(entity)
         // 颜色按真实 id 取，需一次 update；插入先占位避免非空列缺失
@@ -243,14 +267,22 @@ class BackupRepository(
 
     // ---------------------------------------------------------------- 读取来数据
 
-    /** 依据首字符区分 JSON / CSV，让调用方（与 UI 的 mime 多选）都无需声明格式 */
-    private fun incoming(stream: InputStream): List<RecordDto> {
-        val text = stream.readBytes().toString(Charsets.UTF_8)
-        val head = text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
-        return if (head.startsWith("{")) {
-            BackupCodec.fromJson(text).getOrThrow().records
+    /** 一段备份解析后的完整内容（CSV 只有 records，其余节为空/默认） */
+    private data class ParsedBackup(
+        val records: List<RecordDto>,
+        val profile: ProfileDto? = null,
+        val exerciseTypes: List<ExerciseTypeDto> = emptyList(),
+        val dailyNotes: List<DailyNoteDto> = emptyList(),
+    )
+
+    /** 依据首字符区分 JSON / CSV；先剥 BOM 再嗅探（Windows 记事本另存默认带 BOM） */
+    private fun parsed(stream: InputStream): ParsedBackup {
+        val text = stream.readBytes().toString(Charsets.UTF_8).removePrefix("\uFEFF").trimStart()
+        return if (text.startsWith("{")) {
+            val file = BackupCodec.fromJson(text).getOrThrow()
+            ParsedBackup(file.records, file.profile, file.exerciseTypes, file.dailyNotes)
         } else {
-            CsvCodec.parse(text).getOrThrow()
+            ParsedBackup(CsvCodec.parse(text).getOrThrow())
         }
     }
 
@@ -290,7 +322,6 @@ class BackupRepository(
     }
 
     companion object {
-        private const val KEY_LAST_IMPORT = "last_import"
         private const val SORT_ORDER_BASE = 100
         private val NAME_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm", Locale.ROOT)
 

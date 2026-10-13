@@ -39,6 +39,7 @@ import com.fitrecord.app.domain.backup.ConflictPolicy
 import com.fitrecord.app.ui.components.AppCard
 import com.fitrecord.app.ui.components.ConfirmDialog
 import com.fitrecord.app.ui.theme.Dimens
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,7 +93,7 @@ class BackupViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
         result.onSuccess { _ui.value = BackupUi.Done("已导出 $it 条训练记录到 $label") }
-            .onFailure { _ui.value = BackupUi.Failed(it.readableMessage()) }
+            .onFailure { fail(it) }
     }
 
     fun preview(resolver: ContentResolver, uri: Uri) = viewModelScope.launch {
@@ -102,7 +103,7 @@ class BackupViewModel(private val container: AppContainer) : ViewModel() {
                 resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取所选文件")
             }
         }
-        bytes.onFailure { pendingBytes = null; _ui.value = BackupUi.Failed(it.readableMessage()); return@launch }
+        bytes.onFailure { pendingBytes = null; fail(it); return@launch }
         pendingBytes = bytes.getOrThrow()
         runPreview()
     }
@@ -115,7 +116,7 @@ class BackupViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
         result.onSuccess { _ui.value = BackupUi.Previewing(it) }
-            .onFailure { _ui.value = BackupUi.Failed(it.readableMessage()) }
+            .onFailure { fail(it) }
     }
 
     fun setPolicy(skip: Boolean) = viewModelScope.launch {
@@ -125,6 +126,12 @@ class BackupViewModel(private val container: AppContainer) : ViewModel() {
 
     fun apply() = viewModelScope.launch {
         val data = pendingBytes ?: return@launch
+        // 只读模式（迁移失败，规格 6.9）禁止导入：不得在半坏的库上大批写入。
+        // 恢复页的导入走"删库重启→新进程 readOnly=false"，不经过此守卫。
+        if (container.readOnly.value) {
+            _ui.value = BackupUi.Failed("当前为只读模式，不可导入；请先重建数据库")
+            return@launch
+        }
         _ui.value = BackupUi.Working("正在导入…")
         val result = runCatching {
             withContext(Dispatchers.IO) {
@@ -136,11 +143,17 @@ class BackupViewModel(private val container: AppContainer) : ViewModel() {
             _ui.value = BackupUi.Done("导入完成：新增 ${it.inserted} · 更新 ${it.updated} · 跳过 ${it.skipped}")
         }.onFailure {
             pendingBytes = null
-            _ui.value = BackupUi.Failed(it.readableMessage())
+            fail(it)
         }
     }
 
     fun reset() = viewModelScope.launch { pendingBytes = null; _ui.value = BackupUi.Idle }
+
+    /** 统一失败处理：不吞协程取消（否则页面销毁会被误渲染成 Failed 卡） */
+    private fun fail(t: Throwable) {
+        if (t is CancellationException) throw t
+        _ui.value = BackupUi.Failed(t.readableMessage())
+    }
 
     companion object {
         fun suggestedName(ext: String): String = BackupRepository.suggestedName(ext)
@@ -161,6 +174,7 @@ fun BackupScreen(nav: NavHostController) {
     val vm: BackupViewModel = viewModel(factory = BackupViewModel.factory(container))
     val ui by vm.uiState.collectAsStateWithLifecycle()
     val policy by vm.policy.collectAsStateWithLifecycle()
+    val readOnly by container.readOnly.collectAsStateWithLifecycle()
     var confirmOverwrite by remember { mutableStateOf(false) }
 
     val exportJsonLauncher = rememberLauncherForActivityResult(
@@ -198,11 +212,17 @@ fun BackupScreen(nav: NavHostController) {
             OutlinedButton(
                 onClick = {
                     importLauncher.launch(
-                        arrayOf("application/json", "text/comma-separated-values", "text/csv", "application/octet-stream"),
+                        arrayOf(
+                            "application/json", "text/comma-separated-values", "text/csv",
+                            // 不少 ROM/三方 provider 把 .json/.csv 报成 text/plain，加宽免“选不到备份文件”
+                            "text/plain", "application/octet-stream",
+                        ),
                     )
                 },
+                // 只读模式（规格 6.9）锁导入不锁导出：先把数据导出来是恢复的前提
+                enabled = !readOnly,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("选择文件导入") }
+            ) { Text(if (readOnly) "只读模式下不可导入" else "选择文件导入") }
 
             when (ui) {
                 is BackupUi.Working -> {

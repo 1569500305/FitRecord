@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.io.File
 
 /**
  * 降级状态机（规格 6.9 / 6.10）。
@@ -42,10 +43,29 @@ class FatalStateTest {
         assertTrue(container.fatal.value is AppContainer.FatalState.Corrupted)
     }
 
+    /** 评审 I-6：最常见的损坏是 malformed，且常被包在外层异常里 —— 必须沿 cause 链识别 */
+    @Test fun `malformed wrapped in outer exception still classifies as corrupted`() {
+        val container = AppContainer(ApplicationProvider.getApplicationContext())
+        container.markFatal(RuntimeException("could not prepare statement",
+            IllegalStateException("database disk image is malformed")))
+        assertTrue(container.fatal.value is AppContainer.FatalState.Corrupted)
+    }
+
     @Test fun `recreate deletes the database file`() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.getDatabasePath(FitRecordDatabase.DB_NAME).also { it.parentFile?.mkdirs() }.writeBytes(byteArrayOf(1, 2, 3))
         ctx.deleteDatabase(FitRecordDatabase.DB_NAME)
         assertFalse(ctx.getDatabasePath(FitRecordDatabase.DB_NAME).exists())
+    }
+
+    /** 评审 Critical-1：恢复页走的是 purgeDatabase（主库 + WAL 侧文件），不是 ctx.deleteDatabase */
+    @Test fun `purgeDatabase deletes side files too`() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val base = ctx.getDatabasePath(FitRecordDatabase.DB_NAME)
+        base.parentFile?.mkdirs()
+        val files = listOf(base, File("${base.path}-wal"), File("${base.path}-shm"), File("${base.path}-journal"))
+        files.forEach { it.writeBytes(byteArrayOf(9)) }
+        assertTrue(purgeDatabase(ctx))
+        files.forEach { assertFalse("${it.name} 应已删除", it.exists()) }
     }
 }

@@ -72,7 +72,6 @@ class AppContainer(
             profileDao = profileDao,
             noteDao = noteDao,
             bodyPartDao = bodyPartDao,
-            foodDao = foodDao,
             metaDao = metaDao,
             colorForNewType = { id -> ExercisePalette.colorForId(id).toRgbLong() },
         )
@@ -123,12 +122,24 @@ class AppContainer(
     }
 
     fun markFatal(t: Throwable) {
-        val message = t.message.orEmpty()
         _readOnly.value = true
-        _fatal.value = if (message.contains("SQLITE_NOTADB") || message.contains("file is not a database")) {
-            FatalState.Corrupted(message)
+        // 沿异常链收集消息：Room 常把 SQLiteException 包在 IOException/IllegalStateException 里，
+        // 只看顶层 message 会漏判。
+        val chain = generateSequence(t) { it.cause }.mapNotNull { it.message }.joinToString(" ")
+        // 不只是 NOTADB：典型损坏是 "database disk image is malformed"（SQLITE_CORRUPT），
+        // 漏了它就只会挂红色横幅、永远进不了恢复页（规格 6.10）。
+        val corrupted = CORRUPT_MARKERS.any { chain.contains(it, ignoreCase = true) }
+        _fatal.value = if (corrupted) {
+            FatalState.Corrupted(t.message)
         } else {
-            FatalState.MigrationFailed(message)
+            FatalState.MigrationFailed(t.message)
         }
+    }
+
+    private companion object {
+        val CORRUPT_MARKERS = listOf(
+            "SQLITE_NOTADB", "file is not a database", "malformed",
+            "SQLITE_CORRUPT", "file is too short",
+        )
     }
 }

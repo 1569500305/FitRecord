@@ -113,10 +113,12 @@ object CsvCodec {
     private fun trimNumber(value: Double): String =
         if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
-    private fun escape(value: String): String =
-        if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
-            "\"" + value.replace("\"", "\"\"") + "\""
-        } else value
+    private fun escape(value: String): String {
+        // CSV 解析按行切，字段内换行会被勈成两行→列数不符报错；导出时先把换行拍平为空格。
+        // （备注可多行输入，但 CSV 只定位可读记录表；无损恢复请用 JSON。）
+        val flat = value.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+        return if (flat.any { it == ',' || it == '"' }) "\"" + flat.replace("\"", "\"\"") + "\"" else flat
+    }
 
     fun parse(text: String): Result<List<RecordDto>> = runCatching {
         val body = text.removePrefix(BOM).replace("\r\n", "\n").trimEnd('\n')

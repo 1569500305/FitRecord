@@ -13,7 +13,7 @@
 | 3 | P0–P10 + P8b 全实现，深色模式无一处硬编码颜色 | **PASS(代码) / MANUAL(观感)** | 10 屏 + 引导（无体重时 P3「完善身体参数」卡与 P1 Banner）全部接线；本轮把图表 Canvas 的固定深灰（环形中心 `0xFF202020`、雷达轴名 `0xFF606060`、热力格数字 `0xFF204030`、网格 `0x33/0x40 808080`、轴标签 `0xFF808080`）全部改为进入 `Canvas` 前捕获 `MaterialTheme.colorScheme` 的 `onSurface/onSurfaceVariant/outline` 再注入；类型编辑弹窗选中边框 `Color.Black` → `colorScheme.primary`。深色观感最终确认建议真机走一遍 |
 | 4 | 增删改记录 → 日历即时更新 → 统计五图正确聚合 → 卡路里/食物等价一致 | **PASS(逻辑) / MANUAL(交互)** | `TrainingRepositoryTest`、`CalendarBuilderTest`、`StatsRepositoryTest`（14 条）、`CalorieCalculatorTest`、`FoodEquivalentTest` 全绿；渲染不崩由 `AppStartupTest` + `ViewModelFactoryTest` 兜，点击→刷新整链建议真机走一遍 |
 | 5 | 自定义运动类型（MET 必填 + 参考表回填）→ 出现在选择器与图表 | **PASS** | `TypesViewModel` draft 模式 + MET 参考表回填；删除前查 `usageCount`，被引用改走归档（规格 6.4）；`ViewModelFactoryTest` 覆盖工厂构造不擦除（真机闪退回归） |
-| 6 | 导出 JSON → 卸载重装 → 导入 → 记录数与卡路里完全一致 | **PASS(编解码/事务) / MANUAL(真机 SAF)** | `BackupRepositoryTest`：导出→清空→回导 2 条完全一致、重导幂等 no-op、未知类型自动创建、脏行走严格模式整批回滚；真机 SAF 选择文件 + 卸载重装路径需手测（见安装说明） |
+| 6 | 导出 JSON → 卸载重装 → 导入 → 记录数与卡路里完全一致 | **PASS(编解码/事务) / MANUAL(真机 SAF)** | `BackupRepositoryTest`：导出→清空→回导 2 条完全一致、重导幂等 no-op、未知类型自动创建、身体参数与每日备注随 JSON 恢复、同键重复行不过计数；严格模式在**校验阶段**拒绝脏数据（整批不进入写入），且类型/记录/参数/备注写入同处一个 `withTransaction`；真机 SAF 选择文件 + 卸载重装路径需手测（见安装说明） |
 | 7 | 改实体字段升版本后旧数据**无损迁移** | **N/A(V1) / 守护 PASS** | V1 schema v1 未发生字段变更，`Migrations.ALL` 空；「升级不丢数据」有行为级守护：`SchemaGuardTest` 守护 5 把 `PRAGMA user_version` 拨到 99 再重开必须报错，且**变异检验**（真加 `fallbackToDestructiveMigration()` 立即变红）确认是真闸门。首个真实 Migration 落地时须补迁移往返测试（台账 L1 前瞻） |
 | 8 | 全程无任何网络权限（Manifest 不出现 `INTERNET`） | **PASS** | `ManifestContractTest`（4 条）无 INTERNET/网络状态/外部存储/媒体权限且 `allowBackup=false`；`aapt2 dump badging` 仅见 androidx 注入的 signature 级自定义权限 `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`，无 `INTERNET` |
 
