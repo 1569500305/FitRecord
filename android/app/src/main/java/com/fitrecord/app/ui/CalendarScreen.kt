@@ -1,6 +1,12 @@
 package com.fitrecord.app.ui
 
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -122,16 +128,28 @@ fun CalendarScreen(nav: NavHostController) {
                     }
                 }
                 item {
-                    Column(Modifier.fillMaxWidth()) {
-                        ui.cells.chunked(7).forEach { week ->
-                            Row(Modifier.fillMaxWidth()) {
-                                week.forEach { cell ->
-                                    Box(Modifier.weight(1f)) {
-                                        DayCellView(
-                                            cell = cell,
-                                            compact = ui.isWeekMode,
-                                            onClick = { vm.onDaySelected(cell.date) },
-                                        )
+                    // 以 ui.month 为键：只在翻月时做方向性滑动+淡入淡出；
+                    // 周模式里选另一天不改月 → 不触发动画，就地刷新。
+                    AnimatedContent(
+                        targetState = ui.month,
+                        transitionSpec = {
+                            val dir = if (targetState > initialState) 1 else -1
+                            (slideInHorizontally { w -> dir * w } + fadeIn())
+                                .togetherWith(slideOutHorizontally { w -> -dir * w } + fadeOut())
+                        },
+                        label = "monthGrid",
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            ui.cells.chunked(7).forEach { week ->
+                                Row(Modifier.fillMaxWidth()) {
+                                    week.forEach { cell ->
+                                        Box(Modifier.weight(1f)) {
+                                            DayCellView(
+                                                cell = cell,
+                                                compact = ui.isWeekMode,
+                                                onClick = { vm.onDaySelected(cell.date) },
+                                            )
+                                        }
                                     }
                                 }
                             }

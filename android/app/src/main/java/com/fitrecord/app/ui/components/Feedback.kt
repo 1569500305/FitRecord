@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
@@ -158,21 +159,27 @@ fun DayCellView(
         modifier = modifier
             .fillMaxWidth()
             .height(if (compact) Dimens.dayCellHeightWeek else Dimens.dayCellHeightMonth)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(Dimens.chipCorner))
             .clickable(onClick = onClick)
             .semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
+        // 选中/今日高亮：用填充整格的圆角矩形（不再是圆圈）；matchParentSize 不反过来撑大格子
+        val highlight = RoundedCornerShape(Dimens.chipCorner)
         when {
             cell.isToday -> Box(
-                Modifier.size(Dimens.selectedCircle).background(MaterialTheme.colorScheme.primary, CircleShape)
+                Modifier
+                    .matchParentSize()
+                    .padding(Dimens.space2)
+                    .background(MaterialTheme.colorScheme.primary, highlight)
             )
 
             cell.isSelected -> Box(
                 Modifier
-                    .size(Dimens.selectedCircle)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                    .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    .matchParentSize()
+                    .padding(Dimens.space2)
+                    .background(MaterialTheme.colorScheme.primaryContainer, highlight)
+                    .border(1.dp, MaterialTheme.colorScheme.primary, highlight)
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -34,17 +34,20 @@ class CalendarBuilderTest {
         firstDay: DayOfWeek = DayOfWeek.MONDAY,
     ) = CalendarBuilder.monthGrid(oct, firstDay, byDay, today, selected)
 
-    @Test fun `month grid is always 42 cells starting before the 1st`() {
+    @Test fun `month grid drops the trailing week with no day in this month`() {
         val cells = grid()
-        assertEquals(42, cells.size)
+        // 2026-10：6 行去掉纯下月的最后一行（11/2–11/8）= 5 行 35 格
+        assertEquals(35, cells.size)
         assertEquals(LocalDate.of(2026, 9, 28), cells.first().date)
-        assertEquals(LocalDate.of(2026, 11, 8), cells.last().date)
+        assertEquals(LocalDate.of(2026, 11, 1), cells.last().date)
+        assertTrue(cells.none { it.date == LocalDate.of(2026, 11, 2) })
+        assertEquals(0, cells.size % 7)   // 仍是整行，列对齐不破
     }
 
     @Test fun `exactly the days of the month are flagged inMonth`() {
         val cells = grid()
         assertEquals(31, cells.count { it.inMonth })
-        assertEquals(11, cells.count { !it.inMonth })   // 5 天前置 + 6 天后置
+        assertEquals(4, cells.count { !it.inMonth })   // 前置 9/28-30 + 尾行仅 11/1
         assertTrue(cells.first { it.date == LocalDate.of(2026, 10, 1) }.inMonth)
         assertFalse(cells.first { it.date == LocalDate.of(2026, 9, 30) }.inMonth)
         assertFalse(cells.first { it.date == LocalDate.of(2026, 11, 1) }.inMonth)

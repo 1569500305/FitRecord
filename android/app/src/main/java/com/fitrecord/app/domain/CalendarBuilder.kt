@@ -54,6 +54,11 @@ object CalendarBuilder {
         selected = selected,
         count = MONTH_CELLS,
     )
+        // 去掉与本月零重合的整周（7 天全在月外的首/尾行）——例如 11/2–11/8 这种纯下月周。
+        // 按 7 个一组过滤，保证剩余仍是整行、列对齐不破。
+        .chunked(WEEK_CELLS)
+        .filterNot { week -> week.none { it.inMonth } }
+        .flatten()
 
     fun weekRow(
         date: LocalDate,
