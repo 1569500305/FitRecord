@@ -116,6 +116,12 @@ class AppContainer(
         _fatal.value = FatalState.MigrationFailed(t.message)
     }
 
+    /** 恢复页删库重启前调用：复位降级态，避免重启瞬间仍闪现只读横幅 */
+    fun resetFatalForRecreate() {
+        _readOnly.value = false
+        _fatal.value = FatalState.Ok
+    }
+
     fun markFatal(t: Throwable) {
         val message = t.message.orEmpty()
         _readOnly.value = true

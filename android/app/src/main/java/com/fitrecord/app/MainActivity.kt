@@ -8,7 +8,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.fitrecord.app.data.prefs.AppSettings
+import com.fitrecord.app.ui.DbUnrecoverableScreen
 import com.fitrecord.app.ui.FitRecordRoot
+import com.fitrecord.app.ui.KEY_OPEN_BACKUP
+import com.fitrecord.app.ui.PREF_RECOVERY
+import com.fitrecord.app.ui.Routes
 import com.fitrecord.app.ui.theme.FitRecordTheme
 import com.fitrecord.app.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.onStart
@@ -22,6 +26,11 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as FitRecordApp).container
 
+        // 一次性消费“重建后从备份导入”标记：命中则本次冷启动直接落在备份页，随后清除
+        val recoveryPrefs = getSharedPreferences(PREF_RECOVERY, MODE_PRIVATE)
+        val startAtBackup = recoveryPrefs.getBoolean(KEY_OPEN_BACKUP, false)
+        if (startAtBackup) recoveryPrefs.edit().remove(KEY_OPEN_BACKUP).apply()
+
         setContent {
             CompositionLocalProvider(LocalContainer provides container) {
                 // 只订阅 snapshot()：主题与周起始日必须原子更新，否则会出现
@@ -32,7 +41,16 @@ class MainActivity : ComponentActivity() {
                     .collectAsState(fallback)
 
                 FitRecordTheme(themeMode = settings.themeMode) {
-                    FitRecordRoot()
+                    // 数据库彻底损坏（规格 6.10）：NavHost 一查即崩，整屏顶替为恢复页
+                    val fatal by container.fatal.collectAsState()
+                    val reason = (fatal as? AppContainer.FatalState.Corrupted)?.reason
+                    if (reason != null) {
+                        DbUnrecoverableScreen(reason)
+                    } else {
+                        FitRecordRoot(
+                            startDestination = if (startAtBackup) Routes.BACKUP else Routes.CALENDAR,
+                        )
+                    }
                 }
             }
         }

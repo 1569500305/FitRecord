@@ -14,11 +14,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.fitrecord.app.LocalContainer
+import com.fitrecord.app.ui.components.ReadOnlyBar
 import com.fitrecord.app.ui.Routes as Nav
 
 private data class TabSpec(val route: String, val label: String, val icon: ImageVector)
@@ -31,12 +34,18 @@ private val TABS = listOf(
 
 /** 单 Activity + Navigation-Compose（规格 1.1 / 1.2） */
 @Composable
-fun FitRecordRoot() {
+fun FitRecordRoot(startDestination: String = Nav.CALENDAR) {
+    val container = LocalContainer.current
     val nav = rememberNavController()
     val backStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    // 只读模式（数据迁移失败，规格 6.9）：顶部插红色横幅，写入口由各自屏按 ui.readOnly 关闭
+    val readOnly by container.readOnly.collectAsStateWithLifecycle()
 
     Scaffold(
+        topBar = {
+            if (readOnly) ReadOnlyBar("数据升级失败，已切换为只读；请先导出数据再联系恢复")
+        },
         bottomBar = {
             if (currentRoute in Nav.tabs) {
                 NavigationBar {
@@ -60,7 +69,7 @@ fun FitRecordRoot() {
     ) { padding ->
         NavHost(
             navController = nav,
-            startDestination = Nav.CALENDAR,
+            startDestination = startDestination,
             modifier = Modifier.padding(padding),
         ) {
             composable(Nav.CALENDAR) { CalendarScreen(nav) }

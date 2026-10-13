@@ -172,10 +172,11 @@ fun CalendarScreen(nav: NavHostController) {
             }
 
             FloatingActionButton(
-                onClick = { nav.navigate(Routes.record(ui.selected)) },
+                // 只读模式（规格 6.9）：不关入口而是让点击成为空操作（本 Material3 版本 FAB 无 enabled 参）
+                onClick = { if (!ui.readOnly) nav.navigate(Routes.record(ui.selected)) },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(Dimens.pagePadding),
             ) {
-                Icon(Icons.Default.Add, contentDescription = "添加训练")
+                Icon(Icons.Default.Add, contentDescription = if (ui.readOnly) "只读模式不可添加" else "添加训练")
             }
         }
     }
