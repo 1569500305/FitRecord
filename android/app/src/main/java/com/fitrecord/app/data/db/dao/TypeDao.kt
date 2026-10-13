@@ -1,6 +1,7 @@
 package com.fitrecord.app.data.db.dao
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -55,6 +56,10 @@ interface TypeDao {
 
     @Update
     suspend fun update(entity: ExerciseTypeEntity)
+
+    /** 仅用于无任何记录引用的自定义类型（调用前必须先查 usageCount） */
+    @Delete
+    suspend fun delete(entity: ExerciseTypeEntity)
 
     @Query("UPDATE exercise_type SET archived = 1 WHERE id = :id")
     suspend fun archive(id: Long)

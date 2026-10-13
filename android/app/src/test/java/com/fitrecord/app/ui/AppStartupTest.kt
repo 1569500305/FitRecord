@@ -154,6 +154,16 @@ class ScreenRenderTest {
         rule.onNodeWithText("体重 kg（必填）").assertExists()
     }
 
+    @Test fun `type list screen composes and offers add custom type`() {
+        content {
+            val nav = rememberNavController()
+            TypeListScreen(nav)
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("运动类型").assertExists()
+        assertCardPresent("＋ 添加自定义类型")
+    }
+
     @Test fun `day screen composes for a date with records`() {
         content {
             val nav = rememberNavController()

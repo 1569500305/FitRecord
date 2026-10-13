@@ -67,7 +67,7 @@ fun FitRecordRoot() {
             composable(Nav.STATS) { StatsScreen(nav) }
             composable(Nav.PROFILE) { ProfileScreen(nav) }
             composable(Nav.BODY) { BodyProfileScreen(nav) }
-            composable(Nav.TYPE_LIST) { ComingSoonScreen("运动类型（接线中）") }
+            composable(Nav.TYPE_LIST) { TypeListScreen(nav) }
             composable(Nav.BACKUP) { ComingSoonScreen("数据备份（接线中）") }
             composable(Nav.APPEARANCE) { AppearanceScreen(nav) }
             composable(Nav.DAY) { entry ->
