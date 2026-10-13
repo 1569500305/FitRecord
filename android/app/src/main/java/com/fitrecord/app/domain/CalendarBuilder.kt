@@ -21,6 +21,11 @@ data class DayCell(
     val typeColors: List<Long>,
     /** 超过 3 种类型时显示 "+n" */
     val showPlusN: Boolean,
+    /**
+     * 当天"主类型"名 = 各类型中总时长最大的那个（并列取先出现的），用于渲染类型图标。
+     * 默认 null 保证旧调用与测试的构造器不破（无记录 / 仅旧数据时为 null）。
+     */
+    val primaryTypeName: String? = null,
 ) {
     val epochDay: Int get() = date.toEpochDay().toInt()
     val trained: Boolean get() = segmentCount > 0
@@ -86,6 +91,10 @@ object CalendarBuilder {
     ): DayCell {
         val records = recordsByDay[day.toEpochDay().toInt()].orEmpty()
         val distinctColors = records.map { it.typeColor }.distinct()
+        // 主类型：按类型分组后总时长最大者；maxByOrNull 遇并列保留第一个，与记录顺序一致
+        val primaryType = records.groupBy { it.typeName }
+            .maxByOrNull { (_, rs) -> rs.sumOf { it.durationMin } }
+            ?.key
         return DayCell(
             date = day,
             inMonth = month == null || YearMonth.from(day) == month,
@@ -94,6 +103,7 @@ object CalendarBuilder {
             segmentCount = records.size,
             typeColors = distinctColors.take(MAX_DOTS),
             showPlusN = distinctColors.size > MAX_DOTS,
+            primaryTypeName = primaryType,
         )
     }
 }

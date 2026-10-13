@@ -25,8 +25,10 @@ import com.fitrecord.app.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -50,12 +52,24 @@ data class MonthSummary(
     val days: Int, val segments: Int, val minutes: Int, val calories: Int?, val foodText: String,
 )
 
+/** 选中日的运动概况（需求：点日历某天 → 底部显示当天概况） */
+data class SelectedDaySummary(
+    val date: LocalDate,
+    val trained: Boolean,
+    val minutes: Int,
+    val segments: Int,
+    val calories: Int?,
+    val foodText: String,
+    val typeNames: List<String>,
+)
+
 data class CalendarUi(
     val month: YearMonth,
     val cells: List<DayCell>,
     val isWeekMode: Boolean,
     val selected: LocalDate,
     val summary: MonthSummary,
+    val daySummary: SelectedDaySummary,
     val showBanner: Boolean,
     val readOnly: Boolean,
 )
@@ -89,7 +103,10 @@ class CalendarViewModel(
         GridKey(m, s, w, f, if (w) WeekUtil.weekRange(s, f) else WeekUtil.monthRange(m))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, initialKey)
 
-    private val records = key.flatMapLatest { k -> repo.observeRecords(k.range) }
+    // 只按"区间"重订阅：选中日期会改变 key，但区间没变时不得重查数据库
+    // （GridKey 含 selected，旧写法下选一天就 flatMapLatest 重发→圆点闪一下）
+    private val records = key.map { it.range }.distinctUntilChanged()
+        .flatMapLatest { k -> repo.observeRecords(k) }
     private val weightKg = repo.observeWeightKg()
     private val foods = repo.observeFoods()
 
@@ -113,6 +130,21 @@ class CalendarViewModel(
         val caloriesInt = inRange.mapNotNull { it.calories }.takeIf { it.isNotEmpty() }
             ?.sum()?.let { Math.round(it).toInt() }
 
+        // 选中日概况：用已加载的 rows 内存过滤，不另开查询
+        val selDay = k.selected.toEpochDay().toInt()
+        val selRows = rows.filter { it.date == selDay }
+        val selCal = selRows.mapNotNull { it.calories }.takeIf { it.isNotEmpty() }
+            ?.sum()?.let { Math.round(it).toInt() }
+        val daySummary = SelectedDaySummary(
+            date = k.selected,
+            trained = selRows.isNotEmpty(),
+            minutes = selRows.sumOf { it.durationMin },
+            segments = selRows.size,
+            calories = selCal,
+            foodText = FoodEquivalent.text(selCal, foodList),
+            typeNames = selRows.map { it.typeName }.distinct(),
+        )
+
         return CalendarUi(
             month = k.month,
             cells = cells,
@@ -125,6 +157,7 @@ class CalendarViewModel(
                 calories = caloriesInt,
                 foodText = FoodEquivalent.text(caloriesInt, foodList),
             ),
+            daySummary = daySummary,
             showBanner = weight == null && !dismissed,
             readOnly = container.readOnly.value,
         )
@@ -132,7 +165,9 @@ class CalendarViewModel(
 
     private fun emptyUi() = CalendarUi(
         YearMonth.from(today), emptyList(), false, today,
-        MonthSummary(0, 0, 0, null, ""), showBanner = false, readOnly = false,
+        MonthSummary(0, 0, 0, null, ""),
+        SelectedDaySummary(today, false, 0, 0, null, "", emptyList()),
+        showBanner = false, readOnly = false,
     )
 
     fun onMonthShift(delta: Int) = viewModelScope.launch { month.update { it.plusMonths(delta.toLong()) } }

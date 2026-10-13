@@ -43,6 +43,7 @@ import com.fitrecord.app.ui.components.DayCellView
 import com.fitrecord.app.ui.components.InfoBanner
 import com.fitrecord.app.ui.components.SegmentedSwitch
 import com.fitrecord.app.ui.theme.Dimens
+import com.fitrecord.app.ui.theme.ExerciseIcons
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -164,9 +165,42 @@ fun CalendarScreen(nav: NavHostController) {
                     }
                 }
                 item {
-                    // 选中日期后直接进当日页（规格 P1 交互 2）
-                    AppCard(onClick = { nav.navigate(Routes.day(ui.selected)) }) {
-                        Text("查看 ${ui.selected.monthValue}月${ui.selected.dayOfMonth}日", style = MaterialTheme.typography.titleLarge)
+                    // 选中日的运动概况（需求 3）；整卡仍可点 → 进当日页（规格 P1 交互 2）
+                    val ds = ui.daySummary
+                    AppCard(onClick = { nav.navigate(Routes.day(ds.date)) }) {
+                        Text(
+                            "${ds.date.monthValue}月${ds.date.dayOfMonth}日 · 运动概况",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Spacer(Modifier.height(Dimens.space4))
+                        if (ds.trained) {
+                            Text(
+                                "${ds.segments} 段 · ${ds.minutes} 分钟" +
+                                    (ds.calories?.let { " · ≈ $it kcal" } ?: ""),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (ds.calories != null && ds.foodText.isNotBlank()) {
+                                Text(
+                                    ds.foodText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                            }
+                            // 类型名 + 对应图标并列（图标与格子里同一套映射）
+                            Text(
+                                ds.typeNames.joinToString("、") {
+                                    ExerciseIcons.emoji(it)?.let { e -> "$it $e" } ?: it
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                "这一天还没有记录，点右下角 + 添加",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

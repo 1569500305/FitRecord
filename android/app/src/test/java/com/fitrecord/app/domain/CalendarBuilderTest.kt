@@ -3,6 +3,7 @@ package com.fitrecord.app.domain
 import com.fitrecord.app.data.db.RecordWithType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.DayOfWeek
@@ -82,6 +83,21 @@ class CalendarBuilderTest {
         assertTrue(cell.typeColors.isEmpty())
         assertFalse(cell.trained)
         assertFalse(cell.showPlusN)
+    }
+
+    @Test fun `primary type is the one with the largest total duration`() {
+        val d = LocalDate.of(2026, 10, 7)
+        val long = rec(d, 1, 0xFF111111L).copy(durationMin = 50)   // 类型1 共 50 分钟
+        val short1 = rec(d, 2, 0xFF222222L).copy(durationMin = 20) // 类型2 共 40
+        val short2 = rec(d, 2, 0xFF222222L).copy(durationMin = 20)
+        val byDay = mapOf(d.toEpochDay().toInt() to listOf(short1, long, short2))
+        val cell = grid(byDay).first { it.date == d }
+        // 类型2 段数更多（2），但类型1 总时长更大 → 主类型应为 t1
+        assertEquals("t1", cell.primaryTypeName)
+    }
+
+    @Test fun `empty day has null primary type`() {
+        assertNull(grid().first { it.date == LocalDate.of(2026, 10, 20) }.primaryTypeName)
     }
 
     @Test fun `today and selected are independent flags`() {

@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fitrecord.app.domain.DayCell
 import com.fitrecord.app.ui.theme.Dimens
+import com.fitrecord.app.ui.theme.ExerciseIcons
 import com.fitrecord.app.ui.theme.LocalUnreadColor
 import com.fitrecord.app.ui.theme.toColor
 
@@ -188,12 +189,23 @@ fun DayCellView(
             )
             // 农历位：V1 不做，留固定占位（规格 2.3）
             Spacer(Modifier.height(Dimens.lunarPlaceholder))
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                cell.typeColors.forEach { color ->
-                    Box(Modifier.size(Dimens.dotSize).clip(CircleShape).background(color.toColor()))
-                }
-                if (cell.showPlusN) {
-                    Text("+", style = MaterialTheme.typography.labelSmall, color = unread)
+            val emoji = ExerciseIcons.emoji(cell.primaryTypeName)
+            if (emoji != null) {
+                // 主类型命中映射：用一个类型图标取代色点（跑步→🏃、划船机→🚣 …）
+                Text(
+                    emoji,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.height(Dimens.dotSize * 2 + 6.dp),
+                )
+            } else {
+                // 自定义/未映射类型回退为原来的彩色圆点，不丢信息
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    cell.typeColors.forEach { color ->
+                        Box(Modifier.size(Dimens.dotSize).clip(CircleShape).background(color.toColor()))
+                    }
+                    if (cell.showPlusN) {
+                        Text("+", style = MaterialTheme.typography.labelSmall, color = unread)
+                    }
                 }
             }
         }

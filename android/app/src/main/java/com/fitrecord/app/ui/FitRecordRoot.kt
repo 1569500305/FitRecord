@@ -1,5 +1,6 @@
 package com.fitrecord.app.ui
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -43,6 +44,9 @@ fun FitRecordRoot(startDestination: String = Nav.CALENDAR) {
     val readOnly by container.readOnly.collectAsStateWithLifecycle()
 
     Scaffold(
+        // 外层不再重复消费系统栏 inset：各屏自带 Scaffold 已加状态栏顶部，
+        // 这里再叠一次就是顶部那块“空白 head”的根因（需求 4）。
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (readOnly) ReadOnlyBar("数据升级失败，已切换为只读；请先导出数据再联系恢复")
         },
