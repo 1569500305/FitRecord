@@ -64,7 +64,7 @@ fun FitRecordRoot() {
             modifier = Modifier.padding(padding),
         ) {
             composable(Nav.CALENDAR) { CalendarScreen(nav) }
-            composable(Nav.STATS) { ComingSoonScreen("统计（接线中）") }
+            composable(Nav.STATS) { StatsScreen(nav) }
             composable(Nav.PROFILE) { ProfileScreen(nav) }
             composable(Nav.BODY) { BodyProfileScreen(nav) }
             composable(Nav.TYPE_LIST) { ComingSoonScreen("运动类型（接线中）") }
