@@ -65,11 +65,11 @@ fun FitRecordRoot() {
         ) {
             composable(Nav.CALENDAR) { CalendarScreen(nav) }
             composable(Nav.STATS) { ComingSoonScreen("统计（接线中）") }
-            composable(Nav.PROFILE) { ComingSoonScreen("我的（接线中）") }
-            composable(Nav.BODY) { ComingSoonScreen("身体参数（接线中）") }
+            composable(Nav.PROFILE) { ProfileScreen(nav) }
+            composable(Nav.BODY) { BodyProfileScreen(nav) }
             composable(Nav.TYPE_LIST) { ComingSoonScreen("运动类型（接线中）") }
             composable(Nav.BACKUP) { ComingSoonScreen("数据备份（接线中）") }
-            composable(Nav.APPEARANCE) { ComingSoonScreen("外观（接线中）") }
+            composable(Nav.APPEARANCE) { AppearanceScreen(nav) }
             composable(Nav.DAY) { entry ->
                 DayRecordScreen(nav, Nav.epochDayOf(entry.arguments?.getString(Nav.ARG_DATE)))
             }
