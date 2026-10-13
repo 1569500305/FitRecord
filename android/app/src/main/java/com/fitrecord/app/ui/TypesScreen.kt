@@ -362,7 +362,7 @@ private fun TypeEditorDialog(vm: TypesViewModel, ui: TypesUi) {
                                 .padding(Dimens.space4)
                                 .border(
                                     width = if (index == ui.draft.colorIndex) 2.dp else 0.dp,
-                                    color = if (index == ui.draft.colorIndex) Color.Black else Color.Transparent,
+                                    color = if (index == ui.draft.colorIndex) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = MaterialTheme.shapes.small,
                                 )
                                 .clickable { vm.onColor(index) }

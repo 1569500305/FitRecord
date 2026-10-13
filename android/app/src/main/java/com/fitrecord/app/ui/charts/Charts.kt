@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -126,6 +127,9 @@ fun BarChart(
 ) {
     val density = LocalDensity.current
     val labelSizePx = with(density) { Dimens.space12.toPx() }
+    // 文字与网格线随主题取色：Canvas 的 DrawScope 不是 composable 作用域，只能在此捕获后注入（DoD-3 深色无硬编码色）
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.30f)
     Canvas(modifier.fillMaxWidth().height(height).pointerInput(points) {
             detectTapGestures { offset ->
                 if (points.isEmpty()) return@detectTapGestures
@@ -142,7 +146,6 @@ fun BarChart(
             val barWidth = slot * 0.55f
 
             // 网格线
-            val gridColor = Color(0x33808080)
             ChartMath.yTicks(max, 3).forEach { tick ->
                 val y = top + plotHeight * (1f - tick / max)
                 drawLine(gridColor, Offset(0f, y), Offset(size.width, y), 1f)
@@ -162,7 +165,7 @@ fun BarChart(
                     point.label,
                     index * slot + slot / 2,
                     size.height - labelSizePx * 0.3f,
-                    chartPaint(Color(0xFF808080), labelSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
+                    chartPaint(labelColor, labelSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
                 )
             }
         }
@@ -178,6 +181,7 @@ fun LineChart(
 ) {
     val density = LocalDensity.current
     val labelSizePx = with(density) { Dimens.space12.toPx() }
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier.fillMaxWidth().height(height)) {
         if (points.isEmpty()) return@Canvas
         val top = labelSizePx * 1.6f
@@ -214,7 +218,7 @@ fun LineChart(
                     point.label,
                     pos(i).x.coerceIn(labelSizePx * 2, (size.width - labelSizePx * 2).coerceAtLeast(labelSizePx * 2)),
                     size.height - labelSizePx * 0.3f,
-                    chartPaint(Color(0xFF808080), labelSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
+                    chartPaint(labelColor, labelSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
                 )
             }
         }
@@ -234,6 +238,8 @@ fun DonutChart(
 ) {
     val density = LocalDensity.current
     val textSizePx = with(density) { Dimens.space12.toPx() }
+    val centerColor = MaterialTheme.colorScheme.onSurface
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier = modifier.fillMaxWidth().height(chartSize)) {
         val pairs = ChartMath.donutSlices(values)
         if (pairs.isEmpty()) return@Canvas
@@ -255,11 +261,11 @@ fun DonutChart(
                 style = Stroke(width = if (selected == index) stroke * 1.15f else stroke),
             )
         }
-        val centerPaint = chartPaint(Color(0xFF202020), textSizePx * 1.25f).apply { textAlign = android.graphics.Paint.Align.CENTER }
+        val centerPaint = chartPaint(centerColor, textSizePx * 1.25f).apply { textAlign = android.graphics.Paint.Align.CENTER }
         drawContext.canvas.nativeCanvas.drawText(centerValue, center.x, center.y + textSizePx * 0.4f, centerPaint)
         drawContext.canvas.nativeCanvas.drawText(
             centerLabel, center.x, center.y + textSizePx * 1.9f,
-            chartPaint(Color(0xFF808080), textSizePx * 0.85f).apply { textAlign = android.graphics.Paint.Align.CENTER },
+            chartPaint(labelColor, textSizePx * 0.85f).apply { textAlign = android.graphics.Paint.Align.CENTER },
         )
     }
 }
@@ -275,11 +281,12 @@ fun RadarChart(
 ) {
     val density = LocalDensity.current
     val textSizePx = with(density) { Dimens.space12.toPx() } * 0.8f
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier = modifier.fillMaxWidth().height(chartSize)) {
         if (axes.isEmpty()) return@Canvas
         val center = Offset(size.width / 2, size.height / 2)
         val radius = min(size.width, size.height) / 2f - textSizePx * 2.2f
-        val gridColor = Color(0x40808080)
 
         // 4 环网格
         (1..4).forEach { ring ->
@@ -307,7 +314,7 @@ fun RadarChart(
         drawPath(dataPath, fillColor.copy(alpha = 0.2f))
         drawPath(dataPath, fillColor, style = Stroke(width = 2f))
         // 轴名
-        val labelPaint = chartPaint(Color(0xFF606060), textSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER }
+        val labelPaint = chartPaint(labelColor, textSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER }
         axes.forEachIndexed { i, name ->
             val p = ChartMath.radarVertex(center, radius, i, axes.size, 1.24f)
             drawContext.canvas.nativeCanvas.drawText(name, p.x, p.y + textSizePx * 0.35f, labelPaint)
@@ -326,6 +333,7 @@ fun CalendarHeatmap(
 ) {
     val density = LocalDensity.current
     val textSizePx = with(density) { Dimens.space12.toPx() } * 0.75f
+    val numberColor = MaterialTheme.colorScheme.onSurface
     Canvas(modifier = modifier.fillMaxWidth().height(sizeOf(days.size))) {
         if (days.isEmpty()) return@Canvas
         val columns = 7
@@ -349,7 +357,7 @@ fun CalendarHeatmap(
                     segments[index].toString(),
                     left + cellW / 2,
                     top + cellH / 2 + textSizePx * 0.35f,
-                    chartPaint(Color(0xFF204030), textSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
+                    chartPaint(numberColor, textSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
                 )
             }
         }
