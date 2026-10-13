@@ -34,9 +34,14 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 
-/** 每屏一个 ViewModel，依赖统一从 AppContainer 注入（无 Hilt，见技术选型）。
- *  这里不用泛型：initializer 的 DSL 要求 reified 类型参数，而本工厂需要在普通函数里复用。 */
-private fun factoryOf(create: () -> androidx.lifecycle.ViewModel): ViewModelProvider.Factory =
+/**
+ * 每屏一个 ViewModel，依赖统一从 AppContainer 注入（无 Hilt，见技术选型）。
+ *
+ * 必须 `inline + reified`：viewModelFactory 的 initializer DSL 以**具体 VM 类**为 key 注册。
+ * 之前写成 `create: () -> ViewModel` 会把类型擦除为 ViewModel，导致启动时
+ * "No initializer set for given class CalendarViewModel" 直接闪退（真机报闪退的根因）。
+ */
+internal inline fun <reified VM : ViewModel> factoryOf(crossinline create: () -> VM): ViewModelProvider.Factory =
     viewModelFactory { initializer { create() } }
 
 // ---------------------------------------------------------------- 日历（P1）
