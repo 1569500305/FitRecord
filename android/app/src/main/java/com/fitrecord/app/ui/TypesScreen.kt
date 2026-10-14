@@ -43,6 +43,7 @@ import com.fitrecord.app.data.db.seed.MetReference
 import com.fitrecord.app.ui.components.AppCard
 import com.fitrecord.app.ui.components.ConfirmDialog
 import com.fitrecord.app.ui.components.TagSelector
+import com.fitrecord.app.ui.components.stableOutlinedTextFieldColors
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.ExercisePalette
 import com.fitrecord.app.ui.theme.toColor
@@ -345,11 +346,13 @@ private fun TypeEditorDialog(vm: TypesViewModel, ui: TypesUi) {
                 OutlinedTextField(
                     value = ui.draft.name, onValueChange = { vm.onName(it) },
                     label = { Text("名称（≤10 字）") }, singleLine = true,
+                    colors = stableOutlinedTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = ui.draft.met, onValueChange = { vm.onMet(it) },
                     label = { Text("MET 值（0.5–20）") }, singleLine = true,
                     isError = ui.errors.any { it.contains("MET") },
+                    colors = stableOutlinedTextFieldColors(),
                 )
                 TextButton(onClick = { vm.showMetSheet() }) { Text("📖 查常见运动 MET 参考表") }
                 Text("颜色", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

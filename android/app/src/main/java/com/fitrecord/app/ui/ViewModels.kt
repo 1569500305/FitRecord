@@ -16,6 +16,7 @@ import com.fitrecord.app.data.db.seed.BodyParts
 import com.fitrecord.app.data.repo.TrainingRepository
 import com.fitrecord.app.domain.CalendarBuilder
 import com.fitrecord.app.domain.CalorieCalculator
+import com.fitrecord.app.domain.EffortFormat
 import com.fitrecord.app.domain.DayCell
 import com.fitrecord.app.domain.FoodEquivalent
 import com.fitrecord.app.domain.PeriodType
@@ -52,6 +53,9 @@ data class MonthSummary(
     val days: Int, val segments: Int, val minutes: Int, val calories: Int?, val foodText: String,
 )
 
+/** 选中日某一种运动：名称和这一天该类型的合计分钟。 */
+data class DayTypeEffort(val name: String, val minutes: Int)
+
 /** 选中日的运动概况（需求：点日历某天 → 底部显示当天概况） */
 data class SelectedDaySummary(
     val date: LocalDate,
@@ -60,7 +64,7 @@ data class SelectedDaySummary(
     val segments: Int,
     val calories: Int?,
     val foodText: String,
-    val typeNames: List<String>,
+    val typeEfforts: List<DayTypeEffort>,
 )
 
 data class CalendarUi(
@@ -72,6 +76,8 @@ data class CalendarUi(
     val daySummary: SelectedDaySummary,
     val showBanner: Boolean,
     val readOnly: Boolean,
+    /** 当前网格里没有今天时，标题栏才显示「今天」按钮。 */
+    val showJumpToToday: Boolean,
 )
 
 private data class GridKey(
@@ -93,6 +99,13 @@ class CalendarViewModel(
     private val selected = MutableStateFlow(today)
     private val weekMode = MutableStateFlow(false)
     private val bannerDismissed = MutableStateFlow(false)
+
+    /**
+     * 添加按钮顶边，相对日历内容区顶部，单位 px。
+     * null 表示还没拖过：月视图盖住日历最后一天的数字，周视图贴在月度总结右侧。
+     * 不用 State：拖动时写入不会把整页重组一遍。
+     */
+    var addButtonTopY: Float? = null
 
     private val initialKey = GridKey(
         YearMonth.from(today), today, false, DayOfWeek.MONDAY,
@@ -142,7 +155,9 @@ class CalendarViewModel(
             segments = selRows.size,
             calories = selCal,
             foodText = FoodEquivalent.text(selCal, foodList),
-            typeNames = selRows.map { it.typeName }.distinct(),
+            typeEfforts = selRows.groupBy { it.typeName }.map { (name, group) ->
+                DayTypeEffort(name, group.sumOf { it.durationMin })
+            },
         )
 
         return CalendarUi(
@@ -160,6 +175,7 @@ class CalendarViewModel(
             daySummary = daySummary,
             showBanner = weight == null && !dismissed,
             readOnly = container.readOnly.value,
+            showJumpToToday = cells.isNotEmpty() && cells.none { it.date == today },
         )
     }
 
@@ -167,12 +183,21 @@ class CalendarViewModel(
         YearMonth.from(today), emptyList(), false, today,
         MonthSummary(0, 0, 0, null, ""),
         SelectedDaySummary(today, false, 0, 0, null, "", emptyList()),
-        showBanner = false, readOnly = false,
+        showBanner = false, readOnly = false, showJumpToToday = false,
     )
 
     fun onMonthShift(delta: Int) = viewModelScope.launch { month.update { it.plusMonths(delta.toLong()) } }
     fun onDaySelected(date: LocalDate) = viewModelScope.launch { selected.value = date }
-    fun onToggleMode() = viewModelScope.launch { weekMode.update { !it } }
+
+    /** 周/月视图。0 是周，1 是月。默认月视图；点已选中的项不会翻过去。 */
+    fun onViewMode(index: Int) = viewModelScope.launch { weekMode.value = index == 0 }
+
+    /** 回到今天所在的月份，并选中今天。周视图会一起回到本周。 */
+    fun onJumpToToday() = viewModelScope.launch {
+        val now = today
+        month.value = YearMonth.from(now)
+        selected.value = now
+    }
     fun dismissBanner() = viewModelScope.launch { bannerDismissed.value = true }
 
     companion object {
@@ -249,11 +274,16 @@ class DayRecordViewModel(
 
 enum class EditorMode { CREATE, EDIT }
 
+/** 新建记录的默认时长（分钟）。多数训练落在半小时，避免每次从空值手填。 */
+private const val DEFAULT_DURATION_MINUTES = 30
+
 /** 用户正在敲的表单，单一可变来源（避免十个 flow 手工合并） */
 private data class Draft(
     val date: LocalDate,
     val type: Long? = null,
-    val minutes: Int = 0,
+    val minutes: Int = DEFAULT_DURATION_MINUTES,
+    val setCount: Int = EffortFormat.DEFAULT_SET_COUNT,
+    val repsPerSet: Int = EffortFormat.DEFAULT_REPS_PER_SET,
     val parts: Set<Long> = emptySet(),
     val note: String = "",
     val partsTouched: Boolean = false,
@@ -275,6 +305,9 @@ data class EditorUi(
     val errors: List<String>,
     val dirty: Boolean,
     val readOnly: Boolean,
+    val recordBySets: Boolean = false,
+    val setCount: Int = EffortFormat.DEFAULT_SET_COUNT,
+    val repsPerSet: Int = EffortFormat.DEFAULT_REPS_PER_SET,
 ) {
     val canSave: Boolean get() = errors.isEmpty() && !readOnly
 }
@@ -286,14 +319,22 @@ class RecordEditorViewModel(
     private val recordId: Long,
 ) : ViewModel() {
 
-    private val draft = MutableStateFlow(Draft(initialDate))
+    private val draft = MutableStateFlow(
+        Draft(
+            date = initialDate,
+            minutes = if (recordId < 0) DEFAULT_DURATION_MINUTES else 0,
+        ),
+    )
 
     val uiState: StateFlow<EditorUi> = kotlinx.coroutines.flow.combine(
         draft, container.typeDao.observeActive(), container.bodyPartDao.observeAll(),
         container.profileDao.observeProfile(),
     ) { d, types, parts, profile -> buildUi(d, types, parts, profile) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EditorUi(
-            EditorMode.CREATE, initialDate, emptyList(), null, 0, emptyList(), emptySet(),
+            if (recordId < 0) EditorMode.CREATE else EditorMode.EDIT,
+            initialDate, emptyList(), null,
+            if (recordId < 0) DEFAULT_DURATION_MINUTES else 0,
+            emptyList(), emptySet(),
             "", null, null, false, emptyList(), false, false,
         ))
 
@@ -304,27 +345,43 @@ class RecordEditorViewModel(
         profile: UserProfileEntity?,
     ): EditorUi {
         val type = types.find { it.id == d.type }
-        val kcal = type?.let { CalorieCalculator.kcal(it.met, profile?.weightKg, d.minutes) }
+        val bySets = type?.recordBySets == true
+        val minutesForKcal = if (bySets) EffortFormat.minutesForSets(d.setCount) else d.minutes
+        val kcal = type?.let { CalorieCalculator.kcal(it.met, profile?.weightKg, minutesForKcal) }
         return EditorUi(
             mode = if (recordId < 0) EditorMode.CREATE else EditorMode.EDIT,
             date = d.date,
             types = types,
             selectedType = d.type,
             minutes = d.minutes,
+            recordBySets = bySets,
+            setCount = d.setCount,
+            repsPerSet = d.repsPerSet,
             parts = parts.map { it.id to it.name },
             selectedParts = d.parts,
             note = d.note,
             previewKcal = kcal?.let { Math.round(it).toInt() },
-            formula = type?.let { t -> profile?.let { p -> CalorieCalculator.explain(t.met, p.weightKg, d.minutes) } },
+            formula = if (bySets) {
+                "每组按 ${EffortFormat.MINUTES_PER_SET} 分钟估算消耗"
+            } else {
+                type?.let { t -> profile?.let { p -> CalorieCalculator.explain(t.met, p.weightKg, d.minutes) } }
+            },
             weightMissing = profile == null,
-            errors = validate(d),
+            errors = validate(d, bySets),
             dirty = !d.pristine,
             readOnly = container.readOnly.value,
         )
     }
 
-    private fun validate(d: Draft): List<String> = buildList {
-        if (d.minutes !in 1..1440) add("时长需在 1-1440 分钟")
+    private fun validate(d: Draft, bySets: Boolean): List<String> = buildList {
+        if (bySets) {
+            if (d.setCount !in 1..EffortFormat.MAX_SET_COUNT) add("组数需在 1-${EffortFormat.MAX_SET_COUNT}")
+            if (d.repsPerSet !in 1..EffortFormat.MAX_REPS_PER_SET) {
+                add("每组个数需在 1-${EffortFormat.MAX_REPS_PER_SET}")
+            }
+        } else if (d.minutes !in 1..1440) {
+            add("时长需在 1-1440 分钟")
+        }
         if (d.type == null) add("请选择运动方式")
         if (d.note.length > 500) add("备注最多 500 字")
     }
@@ -337,6 +394,8 @@ class RecordEditorViewModel(
                         date = existing.date,
                         type = existing.type.id,
                         minutes = existing.durationMin,
+                        setCount = existing.setCount.takeIf { it > 0 } ?: EffortFormat.DEFAULT_SET_COUNT,
+                        repsPerSet = existing.repsPerSet.takeIf { it > 0 } ?: EffortFormat.DEFAULT_REPS_PER_SET,
                         parts = existing.bodyPartIds.toSet(),
                         note = existing.note,
                         pristine = false,
@@ -361,6 +420,14 @@ class RecordEditorViewModel(
     }
 
     fun onMinutes(value: Int) = viewModelScope.launch { draft.update { it.copy(minutes = value, pristine = false) } }
+
+    /** 力量类组数。越界值留给校验提示，不在这里静默改掉。 */
+    fun onSetCount(value: Int) = viewModelScope.launch { draft.update { it.copy(setCount = value, pristine = false) } }
+
+    /** 力量类每组个数 */
+    fun onRepsPerSet(value: Int) = viewModelScope.launch {
+        draft.update { it.copy(repsPerSet = value, pristine = false) }
+    }
     fun onNote(value: String) = viewModelScope.launch { draft.update { it.copy(note = value, pristine = false) } }
     fun onDate(value: LocalDate) = viewModelScope.launch { draft.update { it.copy(date = value, pristine = false) } }
 
@@ -372,12 +439,16 @@ class RecordEditorViewModel(
     suspend fun save(): Boolean {
         val d = draft.value
         if (container.readOnly.value) return false
-        if (validate(d).isNotEmpty()) return false
         val type = d.type ?: return false
+        val bySets = container.typeDao.byId(type)?.recordBySets == true
+        if (validate(d, bySets).isNotEmpty()) return false
+        val minutes = if (bySets) EffortFormat.minutesForSets(d.setCount) else d.minutes
+        val setCount = if (bySets) d.setCount else 0
+        val repsPerSet = if (bySets) d.repsPerSet else 0
         if (recordId < 0) {
-            repo.add(d.date, type, d.minutes, d.parts.toList(), d.note)
+            repo.add(d.date, type, minutes, d.parts.toList(), d.note, setCount, repsPerSet)
         } else {
-            repo.update(recordId, d.date, type, d.minutes, d.parts.toList(), d.note)
+            repo.update(recordId, d.date, type, minutes, d.parts.toList(), d.note, setCount, repsPerSet)
         }
         container.settings.setLastExerciseTypeId(type)
         return true
@@ -418,10 +489,15 @@ class StatsViewModel(
         periodType.value = if (index == 0) PeriodType.WEEK else PeriodType.MONTH
     }
 
-    /** ‹ › 翻页；往后翻不得越过当前周期（规格 P2） */
+    /**
+     * ‹ › 翻页。往后翻不得越过当前周期（规格 P2）。
+     * 是否可前进只看当前周期本身，不能用 canShiftForward 的真值去拦截：
+     * 那个标记在“还停在过去”时为真，写反之后点 › 会直接被吃掉。
+     */
     fun onShift(delta: Int) = viewModelScope.launch {
-        if (delta > 0 && uiState.value.canShiftForward) return@launch
-        anchor.value = period.value.shifted(delta).anchor
+        val current = period.value
+        if (delta > 0 && current.isCurrentOrFuture(clock())) return@launch
+        anchor.value = current.shifted(delta).anchor
     }
 
     companion object {
@@ -520,7 +596,7 @@ class AppearanceViewModel(private val container: AppContainer) : ViewModel() {
     val uiState: StateFlow<AppearanceUi> = kotlinx.coroutines.flow.combine(
         container.settings.themeMode, container.settings.firstDayOfWeek,
     ) { mode, day -> AppearanceUi(mode, day) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppearanceUi(ThemeMode.SYSTEM, DayOfWeek.MONDAY))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppearanceUi(ThemeMode.LIGHT, DayOfWeek.MONDAY))
 
     fun setTheme(index: Int) = viewModelScope.launch {
         container.settings.setThemeMode(ThemeMode.entries.toList()[index.coerceIn(0, 2)])

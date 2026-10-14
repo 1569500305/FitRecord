@@ -15,10 +15,12 @@ import kotlinx.coroutines.flow.Flow
 /** JOIN 一次带回类型全字段，避免 toDayRecord 再查 byId（评审 I-1） */
 private const val SELECT_WITH_TYPE = """
     SELECT r.id, r.date, r.exerciseTypeId, r.durationMin, r.calories, r.note,
+           r.setCount, r.repsPerSet,
            t.name AS typeName, t.color AS typeColor, t.met,
            t.isBuiltin AS typeIsBuiltin, t.archived AS typeArchived,
            t.metOverridden AS typeMetOverridden, t.sortOrder AS typeSortOrder,
-           t.defaultBodyPartIds AS typeDefaultBodyPartIds
+           t.defaultBodyPartIds AS typeDefaultBodyPartIds,
+           t.recordBySets AS typeRecordBySets
     FROM training_record r JOIN exercise_type t ON t.id = r.exerciseTypeId
 """
 

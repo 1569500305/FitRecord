@@ -33,6 +33,7 @@ import com.fitrecord.app.BuildConfig
 import com.fitrecord.app.LocalContainer
 import com.fitrecord.app.ui.components.AppCard
 import com.fitrecord.app.ui.components.SegmentedSwitch
+import com.fitrecord.app.ui.components.stableOutlinedTextFieldColors
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
@@ -65,12 +66,14 @@ fun BodyProfileScreen(nav: NavHostController) {
                 value = ui.ageText, onValueChange = { vm.onAge(it) },
                 label = { Text("年龄（可留空）") }, singleLine = true,
                 isError = ui.errors.any { it.contains("年龄") },
+                colors = stableOutlinedTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = ui.heightText, onValueChange = { vm.onHeight(it) },
                 label = { Text("身高 cm（可留空）") }, singleLine = true,
                 isError = ui.errors.any { it.contains("身高") },
+                colors = stableOutlinedTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -81,6 +84,7 @@ fun BodyProfileScreen(nav: NavHostController) {
                     val err = ui.errors.firstOrNull { it.contains("体重") }
                     if (err != null) Text(err, color = MaterialTheme.colorScheme.error)
                 },
+                colors = stableOutlinedTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             ui.errors.filterNot { it.contains("体重") }.forEach {

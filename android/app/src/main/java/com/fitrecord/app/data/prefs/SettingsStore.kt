@@ -98,7 +98,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
      */
 
     private fun themeOf(p: Preferences): ThemeMode =
-        p[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
+        p[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.LIGHT
 
     private fun dayOf(p: Preferences): DayOfWeek =
         p[Keys.FIRST_DAY]?.let { runCatching { DayOfWeek.valueOf(it) }.getOrNull() } ?: DayOfWeek.MONDAY

@@ -8,11 +8,14 @@ import org.junit.Test
 class SeedDataTest {
 
     @Test fun `8 builtin exercises in spec order`() {
-        assertEquals(8, BuiltinExercises.items.size)
+        assertEquals(11, BuiltinExercises.items.size)
         assertEquals(
-            listOf("划船机", "椭圆机", "动感单车", "跑步机", "自由力量", "瑜伽", "快走", "游泳"),
+            listOf("划船机", "椭圆机", "动感单车", "跑步机", "自由力量", "瑜伽", "快走", "游泳", "深蹲", "俯卧撑", "哑铃"),
             BuiltinExercises.items.map { it.name },
         )
+        assertEquals(true, BuiltinExercises.byName("瑜伽").archived)
+        assertEquals(true, BuiltinExercises.byName("游泳").archived)
+        assertEquals(true, BuiltinExercises.byName("深蹲").recordBySets)
     }
 
     @Test fun `builtin met values match spec section 4_5`() {
@@ -28,7 +31,7 @@ class SeedDataTest {
 
     /** colorIndex 必须等于 ExercisePalette 下标，否则日历点与饼图会串色 */
     @Test fun `builtin color indices are zero to seven with no duplicate`() {
-        assertEquals((0..7).toList(), BuiltinExercises.items.map { it.colorIndex })
+        assertEquals((0 until BuiltinExercises.items.size).toList(), BuiltinExercises.items.map { it.colorIndex })
     }
 
     @Test fun `every builtin default body part id exists in BodyParts`() {

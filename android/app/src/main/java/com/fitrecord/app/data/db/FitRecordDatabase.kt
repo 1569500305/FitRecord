@@ -24,7 +24,7 @@ import com.fitrecord.app.data.db.entity.TrainingRecordEntity
 import com.fitrecord.app.data.db.entity.UserProfileEntity
 
 /**
- * Room schema v1。
+ * Room schema v2。
  * exportSchema = true 且 schemaLocation 已在 build.gradle.kts 配好 ——
  * schemas/ 目录下的 JSON 是迁移测试与"守护 1"的依据，必须纳入版本控制。
  */
@@ -39,7 +39,7 @@ import com.fitrecord.app.data.db.entity.UserProfileEntity
         FoodItemEntity::class,
         MetaEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class FitRecordDatabase : RoomDatabase() {
@@ -56,7 +56,7 @@ abstract class FitRecordDatabase : RoomDatabase() {
     companion object {
         const val DB_NAME = "fitrecord.db"
 
-        /** 迁移登记表在 Migrations.kt；V1 为空数组，但链路必须真实存在 */
+        /** 迁移登记表在 Migrations.kt，升级失败不得静默重建库 */
         val MIGRATIONS: Array<Migration> = Migrations.ALL
 
         /** 建库时写入创建时间戳。外键约束由 Room 自动开启（PRAGMA foreign_keys = ON），

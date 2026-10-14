@@ -37,4 +37,7 @@ data class RecordWithType(
     val typeMetOverridden: Boolean = false,
     val typeSortOrder: Int = 0,
     val typeDefaultBodyPartIds: String = "",
+    val setCount: Int = 0,
+    val repsPerSet: Int = 0,
+    val typeRecordBySets: Boolean = false,
 )

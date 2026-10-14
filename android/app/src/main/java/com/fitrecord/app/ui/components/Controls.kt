@@ -18,7 +18,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,12 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fitrecord.app.ui.theme.Dimens
+import com.fitrecord.app.ui.theme.MetricNumber
 
 /**
  * 分段切换（规格 2.4）。刻意用 Box + clickable 手写而不是 Material3 的
@@ -78,18 +82,18 @@ fun SegmentedSwitch(
     }
 }
 
-/** 快捷时长（规格 P5） */
-private val QUICK_MINUTES = listOf(15, 30, 45, 60, 90)
+/** 快捷时长。最后一格是加 5 分钟，不是一个固定时长。 */
+private val QUICK_MINUTES = listOf(20, 30, 45, 60, 90)
 private const val MAX_MINUTES = 1440
 private const val STEP = 5
+private const val ADD_FIVE_LABEL = "+5"
 
 /**
- * 时长输入（规格 2.4 MinuteField）。
+ * 时长输入。
  *
- * 快捷 chip 必须放在 FlowRow 里：上一轮把 7 个控件塞进裸 Row，最后一颗 chip
- * 被排到屏幕外，点击落空（T13 台账记录）。文本与数值双状态，避免"敲到一半被清零"。
+ * 数字用大号等宽样式，下面六个快捷键等分一行：20、30、45、60、90 写入对应分钟，
+ * +5 在当前时长上加 5。文本与数值双状态，避免敲到一半被清零。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MinuteField(
     value: Int,
@@ -97,7 +101,12 @@ fun MinuteField(
     error: String?,
     modifier: Modifier = Modifier,
 ) {
-    var text by remember(value) { mutableStateOf(if (value == 0) "" else value.toString()) }
+    var text by remember { mutableStateOf(minutesText(value)) }
+    // 只在外部改值（快捷时长、+5）时回写。每次按键都按 value 重建文本会让输入框丢掉焦点
+    LaunchedEffect(value) {
+        val typed = text.toIntOrNull() ?: 0
+        if (typed != value) text = minutesText(value)
+    }
 
     OutlinedTextField(
         value = text,
@@ -106,39 +115,95 @@ fun MinuteField(
             text = digits
             onValueChange(digits.toIntOrNull() ?: 0)
         },
-        label = { Text("时长（分钟）") },
+        label = { Text("时长") },
+        suffix = {
+            Text("分钟", style = MaterialTheme.typography.bodyMedium)
+        },
+        textStyle = MetricNumber,
         isError = error != null,
         supportingText = error?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+        colors = stableOutlinedTextFieldColors(),
         modifier = modifier.fillMaxWidth(),
     )
+    DurationShortcutRow(
+        value = value,
+        onPick = onValueChange,
+        onAddFive = { onValueChange((value + STEP).coerceAtMost(MAX_MINUTES)) },
+    )
+}
 
+/** 时长快捷键。每格 weight(1)，六个键始终排在同一行，不会换行挤出屏幕。 */
+@Composable
+private fun DurationShortcutRow(
+    value: Int,
+    onPick: (Int) -> Unit,
+    onAddFive: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = Dimens.space4),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.space8),
-    ) {
-        OutlinedButton(
-            onClick = { onValueChange((value - STEP).coerceAtLeast(0)) },
-            modifier = Modifier.height(Dimens.minTouchTarget),
-        ) { Text("−5") }
-        OutlinedButton(
-            onClick = { onValueChange((value + STEP).coerceAtMost(MAX_MINUTES)) },
-            modifier = Modifier.height(Dimens.minTouchTarget),
-        ) { Text("+5") }
-    }
-
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(top = Dimens.space4),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.space8),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.space8),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.space4),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         QUICK_MINUTES.forEach { minutes ->
-            FilterChip(
+            MinuteShortcut(
+                label = minutes.toString(),
+                description = "$minutes 分钟",
                 selected = value == minutes,
-                onClick = { onValueChange(minutes) },
-                label = { Text(minutes.toString()) },
+                onClick = { onPick(minutes) },
+                modifier = Modifier.weight(1f),
             )
         }
+        MinuteShortcut(
+            label = ADD_FIVE_LABEL,
+            description = "增加 5 分钟",
+            selected = false,
+            accent = true,
+            onClick = onAddFive,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** 单个时长快捷键。选中时用主色底，+5 用强调色，和固定时长区分开。 */
+@Composable
+private fun MinuteShortcut(
+    label: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accent: Boolean = false,
+) {
+    val background = when {
+        selected -> MaterialTheme.colorScheme.primaryContainer
+        accent -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val color = when {
+        selected -> MaterialTheme.colorScheme.onPrimaryContainer
+        accent -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = modifier
+            .heightIn(min = Dimens.minTouchTarget)
+            .clip(RoundedCornerShape(Dimens.chipCorner))
+            .background(background)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -166,6 +231,21 @@ fun TagSelector(
     }
 }
 
+/** 把分钟数写成输入框文本。0 留空，方便直接覆盖。 */
+private fun minutesText(minutes: Int): String = if (minutes == 0) "" else minutes.toString()
+
+/**
+ * 输入框容器色固定为透明。
+ * 默认色在聚焦、报错之间做颜色动画，浅色底上每一帧都会透出一块闪白。
+ */
+@Composable
+fun stableOutlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
+    errorContainerColor = Color.Transparent,
+)
+
 /** 单行步进器（P8 的 MET 输入、P6 的数值输入共用） */
 @Composable
 fun StepperRow(
@@ -185,6 +265,7 @@ fun StepperRow(
             isError = isError,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            colors = stableOutlinedTextFieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
         Row(

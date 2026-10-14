@@ -5,12 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.fitrecord.app.domain.DayCell
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.ExerciseIcons
@@ -155,7 +159,7 @@ fun DayCellView(
     val desc = "${cell.date.monthValue}月${cell.date.dayOfMonth}日，" +
         if (cell.trained) "已健身 ${cell.segmentCount} 段" else "未健身"
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .height(if (compact) Dimens.dayCellHeightWeek else Dimens.dayCellHeightMonth)
@@ -164,33 +168,18 @@ fun DayCellView(
             .semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
-        // 选中/今日高亮：用填充整格的圆角矩形（不再是圆圈）；matchParentSize 不反过来撑大格子
-        val highlight = RoundedCornerShape(Dimens.chipCorner)
-        when {
-            cell.isToday -> Box(
-                Modifier
-                    .matchParentSize()
-                    .padding(Dimens.space2)
-                    .background(MaterialTheme.colorScheme.primary, highlight)
-            )
-
-            cell.isSelected -> Box(
-                Modifier
-                    .matchParentSize()
-                    .padding(Dimens.space2)
-                    .background(MaterialTheme.colorScheme.primaryContainer, highlight)
-                    .border(1.dp, MaterialTheme.colorScheme.primary, highlight)
-            )
-        }
+        DayHighlight(cell)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = cell.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.let { body ->
+                    body.copy(fontSize = (body.fontSize.value + 2f).sp)
+                },
                 fontWeight = if (cell.trained || cell.isToday) FontWeight.Medium else FontWeight.Normal,
                 color = when {
                     cell.isToday -> MaterialTheme.colorScheme.onPrimary
+                    // 当月日期一律黑色（是否已练靠字重 + 下方图标/色点区分，不靠颜色）；非当月置灰
                     !cell.inMonth -> unread.copy(alpha = 0.45f)
-                    !cell.trained -> unread
                     else -> MaterialTheme.colorScheme.onSurface
                 },
             )
@@ -217,4 +206,30 @@ fun DayCellView(
             }
         }
     }
+}
+
+/**
+ * 选中或今日的高亮框。
+ * 有运动时铺满整格，把日期和图标包在同一个圆角矩形里；
+ * 没有运动时用正方形圆角，避免空格子被拉成细长矩形。
+ */
+@Composable
+private fun BoxWithConstraintsScope.DayHighlight(cell: DayCell) {
+    if (!cell.isToday && !cell.isSelected) return
+    val shape = RoundedCornerShape(Dimens.chipCorner)
+    val bounds = if (cell.trained) {
+        Modifier.matchParentSize().padding(Dimens.space2)
+    } else {
+        // 与列宽取齐的正方形；requiredSize 才能在固定行高里不被拉回长方形
+        val side = minOf(maxWidth, maxHeight) - Dimens.space4
+        Modifier.align(Alignment.Center).requiredSize(side)
+    }
+    val painted = if (cell.isToday) {
+        bounds.background(MaterialTheme.colorScheme.primary, shape)
+    } else {
+        bounds
+            .background(MaterialTheme.colorScheme.primaryContainer, shape)
+            .border(1.dp, MaterialTheme.colorScheme.primary, shape)
+    }
+    Box(painted)
 }

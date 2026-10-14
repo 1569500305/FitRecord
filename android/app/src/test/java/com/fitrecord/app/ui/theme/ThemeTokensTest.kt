@@ -25,16 +25,16 @@ class ThemeTokensTest {
     }
 
     @Test fun `exercise palette has 8 distinct colors`() {
-        assertEquals(8, ExercisePalette.colors.size)
-        assertEquals(8, ExercisePalette.colors.distinct().size)
+        assertEquals(11, ExercisePalette.colors.size)
+        assertEquals(11, ExercisePalette.colors.distinct().size)
     }
 
     @Test fun `palette index wraps for arbitrary type id`() {
         assertEquals(ExercisePalette.colors[0], ExercisePalette.colorForId(0))
-        assertEquals(ExercisePalette.colors[0], ExercisePalette.colorForId(8))
+        assertEquals(ExercisePalette.colors[0], ExercisePalette.colorForId(11))
         assertEquals(ExercisePalette.colors[3], ExercisePalette.colorForId(3))
         // 负数（导入的异常数据）也必须安全
-        assertEquals(ExercisePalette.colors[3], ExercisePalette.colorForId(-5))
+        assertEquals(ExercisePalette.colors[6], ExercisePalette.colorForId(-5))
     }
 
     @Test fun `rgb long round trips through color`() {

@@ -85,7 +85,7 @@ class ViewModelFactoryTest {
      * 首帧内容的验证交给 CalendarBuilderTest / StatsRepositoryTest 这些纯逻辑用例。
      */
 
-    @Test fun `theme mode default is system`() = runBlocking {
-        assertEquals(ThemeMode.SYSTEM, container.settings.themeMode.first())
+    @Test fun `theme mode default is light`() = runBlocking {
+        assertEquals(ThemeMode.LIGHT, container.settings.themeMode.first())
     }
 }

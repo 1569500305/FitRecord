@@ -29,6 +29,8 @@ data class ExerciseTypeEntity(
     val sortOrder: Int = 0,
     /** 逗号分隔的 body_part.id，P5 选类型后自动带出的默认部位 */
     val defaultBodyPartIds: String = "",
+    /** true = 按组数 × 每组个数记录（深蹲、俯卧撑、哑铃）；false = 按时长 */
+    val recordBySets: Boolean = false,
 )
 
 @Entity(tableName = "body_part")
@@ -61,6 +63,10 @@ data class TrainingRecordEntity(
     val note: String = "",
     val createdAt: Long,
     val updatedAt: Long,
+    /** 力量类组数。0 表示这条记录按时长填写 */
+    val setCount: Int = 0,
+    /** 力量类每组个数。与 setCount 同时为 0 时界面显示分钟 */
+    val repsPerSet: Int = 0,
 )
 
 @Entity(

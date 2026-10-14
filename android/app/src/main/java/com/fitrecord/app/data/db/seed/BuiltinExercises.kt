@@ -10,6 +10,10 @@ data class BuiltinExercise(
     val met: Double,
     val colorIndex: Int,
     val defaultBodyPartIds: String,
+    /** 按组数和每组个数记录，而不是分钟 */
+    val recordBySets: Boolean = false,
+    /** 仍保留在类型库里，但选择器默认不列出 */
+    val archived: Boolean = false,
 )
 
 object BuiltinExercises {
@@ -20,9 +24,12 @@ object BuiltinExercises {
         BuiltinExercise("动感单车", 6.8, 2, "7,8"),
         BuiltinExercise("跑步机", 8.3, 3, "8"),
         BuiltinExercise("自由力量", 5.0, 4, "1,2,3,4,5"),
-        BuiltinExercise("瑜伽", 2.5, 5, "5"),
+        BuiltinExercise("瑜伽", 2.5, 5, "5", archived = true),
         BuiltinExercise("快走", 4.3, 6, "8"),
-        BuiltinExercise("游泳", 5.8, 7, "8"),
+        BuiltinExercise("游泳", 5.8, 7, "8", archived = true),
+        BuiltinExercise("深蹲", 5.0, 8, "6,7", recordBySets = true),
+        BuiltinExercise("俯卧撑", 3.8, 9, "1,3,4", recordBySets = true),
+        BuiltinExercise("哑铃", 5.0, 10, "1,2,3,4", recordBySets = true),
     )
 
     fun byName(name: String): BuiltinExercise = items.first { it.name == name }

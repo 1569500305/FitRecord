@@ -12,6 +12,7 @@ import com.fitrecord.app.data.db.entity.FoodItemEntity
 import com.fitrecord.app.data.db.entity.TrainingRecordEntity
 import com.fitrecord.app.data.db.seed.BodyParts
 import com.fitrecord.app.domain.CalorieCalculator
+import com.fitrecord.app.domain.EffortFormat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -42,7 +43,12 @@ class TrainingRepository(
         val calories: Double?,
         val note: String,
         val bodyPartIds: List<Long>,
-    )
+        val setCount: Int = 0,
+        val repsPerSet: Int = 0,
+    ) {
+        /** 列表和删除确认用的一行摘要：有组数时不显示折算分钟 */
+        fun effortText(): String = EffortFormat.label(setCount, repsPerSet, durationMin)
+    }
 
     /** setTrainedToday 的结果，四种语义互斥（复审 S-1） */
     enum class TodayToggle {
@@ -94,6 +100,8 @@ class TrainingRepository(
         durationMin: Int,
         bodyPartIds: List<Long>,
         note: String,
+        setCount: Int = 0,
+        repsPerSet: Int = 0,
     ): Long =
         trainingDao.insertWithBodyParts(
             entity = TrainingRecordEntity(
@@ -104,6 +112,8 @@ class TrainingRepository(
                 note = note,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
+                setCount = setCount,
+                repsPerSet = repsPerSet,
             ),
             bodyPartIds = bodyPartIds,
         )
@@ -116,6 +126,8 @@ class TrainingRepository(
         durationMin: Int,
         bodyPartIds: List<Long>,
         note: String,
+        setCount: Int = 0,
+        repsPerSet: Int = 0,
     ): Boolean {
         val old = trainingDao.byId(id) ?: return false
         trainingDao.updateWithBodyParts(
@@ -126,6 +138,8 @@ class TrainingRepository(
                 calories = calc(exerciseTypeId, durationMin),
                 note = note,
                 updatedAt = System.currentTimeMillis(),
+                setCount = setCount,
+                repsPerSet = repsPerSet,
             ),
             bodyPartIds = bodyPartIds,
         )
@@ -147,11 +161,21 @@ class TrainingRepository(
             calories = record.calories,
             note = record.note,
             bodyPartIds = parts,
+            setCount = record.setCount,
+            repsPerSet = record.repsPerSet,
         )
     }
 
     suspend fun restore(record: DayRecord): Long =
-        add(record.date, record.type.id, record.durationMin, record.bodyPartIds, record.note)
+        add(
+            record.date,
+            record.type.id,
+            record.durationMin,
+            record.bodyPartIds,
+            record.note,
+            record.setCount,
+            record.repsPerSet,
+        )
 
     /**
      * 规格 P4 的"今日已健身"开关。
@@ -204,6 +228,8 @@ class TrainingRepository(
                 calories = row.calories,
                 note = row.note,
                 bodyPartIds = partsByRecord[row.id].orEmpty(),
+                setCount = row.setCount,
+                repsPerSet = row.repsPerSet,
             )
         }
     }
@@ -219,6 +245,7 @@ class TrainingRepository(
         metOverridden = row.typeMetOverridden,
         sortOrder = row.typeSortOrder,
         defaultBodyPartIds = row.typeDefaultBodyPartIds,
+        recordBySets = row.typeRecordBySets,
     )
 
     private suspend fun defaultBodyParts(typeId: Long): List<Long> =

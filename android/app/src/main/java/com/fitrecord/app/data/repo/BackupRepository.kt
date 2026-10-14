@@ -94,6 +94,8 @@ class BackupRepository(
                 calories = row.calories,
                 bodyParts = linksByRecord[row.id].orEmpty().mapNotNull { partsById[it.bodyPartId] },
                 note = row.note,
+                setCount = row.setCount,
+                repsPerSet = row.repsPerSet,
             )
         }
         return BackupFile(
@@ -218,6 +220,8 @@ class BackupRepository(
                 note = dto.note,
                 createdAt = now,
                 updatedAt = now,
+                setCount = dto.setCount,
+                repsPerSet = dto.repsPerSet,
             ),
             bodyPartIds = partIds,
         )
@@ -236,6 +240,8 @@ class BackupRepository(
                 calories = kcal,
                 note = dto.note,
                 updatedAt = System.currentTimeMillis(),
+                setCount = dto.setCount,
+                repsPerSet = dto.repsPerSet,
             ),
             bodyPartIds = resolvePartIds(dto.bodyParts),
         )

@@ -45,9 +45,9 @@ class SettingsStoreTest {
 
     private fun storeFor(name: String): SettingsStore = harness(name).settings
 
-    @Test fun `defaults are follow-system, monday, and no last type`() = runBlocking {
+    @Test fun `defaults are light theme, monday, and no last type`() = runBlocking {
         val s = storeFor("t_defaults").snapshot().first()
-        assertEquals(ThemeMode.SYSTEM, s.themeMode)
+        assertEquals(ThemeMode.LIGHT, s.themeMode)
         assertEquals(DayOfWeek.MONDAY, s.firstDayOfWeek)
         assertEquals(null, s.lastExerciseTypeId)
     }
@@ -60,11 +60,11 @@ class SettingsStoreTest {
         assertEquals(ThemeMode.LIGHT, s.themeMode.first())
     }
 
-    @Test fun `unknown stored theme string falls back to SYSTEM instead of crashing`() = runBlocking {
+    @Test fun `unknown stored theme string falls back to LIGHT instead of crashing`() = runBlocking {
         val s = storeFor("t_badtheme")
         s.setRawString("theme_mode", "PIXEL")
-        assertEquals(ThemeMode.SYSTEM, s.themeMode.first())
-        assertEquals(ThemeMode.SYSTEM, s.snapshot().first().themeMode)
+        assertEquals(ThemeMode.LIGHT, s.themeMode.first())
+        assertEquals(ThemeMode.LIGHT, s.snapshot().first().themeMode)
     }
 
     @Test fun `unknown stored day string falls back to MONDAY`() = runBlocking {
@@ -140,7 +140,7 @@ class SettingsStoreTest {
         )
         val snapshot = SettingsStore(ds).snapshot().first()
 
-        assertEquals(ThemeMode.SYSTEM, snapshot.themeMode)
+        assertEquals(ThemeMode.LIGHT, snapshot.themeMode)
         assertEquals(DayOfWeek.MONDAY, snapshot.firstDayOfWeek)
         assertEquals(null, snapshot.lastExerciseTypeId)
         scope.cancel()
@@ -154,7 +154,7 @@ class SettingsStoreTest {
 
     @Test fun `snapshot emits again after a write`() = runBlocking {
         val s = storeFor("t_reemit")
-        assertEquals(ThemeMode.SYSTEM, s.snapshot().first().themeMode)
+        assertEquals(ThemeMode.LIGHT, s.snapshot().first().themeMode)
         s.setThemeMode(ThemeMode.DARK)
         assertEquals(ThemeMode.DARK, s.snapshot().first().themeMode)
     }

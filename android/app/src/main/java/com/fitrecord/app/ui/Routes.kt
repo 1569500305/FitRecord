@@ -19,7 +19,8 @@ object Routes {
     val tabs = setOf(CALENDAR, STATS, PROFILE)
 
     const val DAY = "day/{$ARG_DATE}"
-    const val RECORD = "record?{$ARG_DATE}&{$ARG_ID}"
+    // 查询参数必须写成 name={name}。写成 {date}&{id} 时导航把 "date=20374" 整段塞进参数，解析失败后回落到今天
+    const val RECORD = "record?$ARG_DATE={$ARG_DATE}&$ARG_ID={$ARG_ID}"
     const val TYPE_EDIT = "type/edit/{$ARG_ID}"
 
     fun day(date: LocalDate): String = "day/${date.toEpochDay()}"

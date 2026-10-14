@@ -124,6 +124,8 @@ fun BarChart(
     modifier: Modifier = Modifier,
     height: Dp = Dimens.chartHeight,
     onBarClick: (Int) -> Unit = {},
+    emphasizeIndex: Int = -1,
+    showValues: Boolean = false,
 ) {
     val density = LocalDensity.current
     val labelSizePx = with(density) { Dimens.space12.toPx() }
@@ -155,12 +157,29 @@ fun BarChart(
                 val ratio = if (max > 0f) point.value / max else 0f
                 val barHeight = maxOf(plotHeight * ratio, if (point.value > 0f) 4f else 2f)
                 val left = index * slot + (slot - barWidth) / 2
+                val emphasized = index == emphasizeIndex
+                val color = when {
+                    point.value <= 0f -> barColor.copy(alpha = 0.12f)
+                    emphasized -> barColor
+                    emphasizeIndex >= 0 -> barColor.copy(alpha = 0.45f)
+                    else -> barColor
+                }
                 drawRoundRect(
-                    color = if (point.value > 0f) barColor else barColor.copy(alpha = 0.15f),
+                    color = color,
                     topLeft = Offset(left, top + plotHeight - barHeight),
                     size = Size(barWidth, barHeight),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f),
                 )
+                if (showValues && point.value > 0f) {
+                    drawContext.canvas.nativeCanvas.drawText(
+                        point.value.roundToInt().toString(),
+                        index * slot + slot / 2,
+                        top + plotHeight - barHeight - labelSizePx * 0.25f,
+                        chartPaint(if (emphasized) barColor else labelColor, labelSizePx).apply {
+                            textAlign = android.graphics.Paint.Align.CENTER
+                        },
+                    )
+                }
                 drawContext.canvas.nativeCanvas.drawText(
                     point.label,
                     index * slot + slot / 2,
@@ -330,44 +349,72 @@ fun CalendarHeatmap(
     levelColors: List<Color>,
     modifier: Modifier = Modifier,
     onDayClick: (Int) -> Unit = {},
+    leadingBlanks: Int = 0,
 ) {
     val density = LocalDensity.current
     val textSizePx = with(density) { Dimens.space12.toPx() } * 0.75f
     val numberColor = MaterialTheme.colorScheme.onSurface
-    Canvas(modifier = modifier.fillMaxWidth().height(sizeOf(days.size))) {
+    val blanks = leadingBlanks.coerceAtLeast(0)
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .height(sizeOf(days.size + blanks))
+            .pointerInput(days, blanks) {
+                detectTapGestures { offset ->
+                    if (days.isEmpty()) return@detectTapGestures
+                    val columns = 7
+                    val total = days.size + blanks
+                    val rows = (total + columns - 1) / columns
+                    val cellW = size.width.toFloat() / columns
+                    val cellH = size.height.toFloat() / rows.coerceAtLeast(1)
+                    if (cellW <= 0f || cellH <= 0f) return@detectTapGestures
+                    val col = (offset.x / cellW).toInt().coerceIn(0, columns - 1)
+                    val row = (offset.y / cellH).toInt().coerceIn(0, rows - 1)
+                    val dayIndex = row * columns + col - blanks
+                    if (dayIndex in days.indices) onDayClick(dayIndex)
+                }
+            },
+    ) {
         if (days.isEmpty()) return@Canvas
         val columns = 7
-        val rows = (days.size + columns - 1) / columns
+        val total = days.size + blanks
+        val rows = (total + columns - 1) / columns
         val cellW = size.width / columns
         val cellH = size.height / rows
-        days.indices.forEach { index ->
-            val col = index % columns
-            val row = index / columns
-            val level = ChartMath.heatLevel(segments.getOrElse(index) { 0 })
+        for (cell in 0 until total) {
+            val dayIndex = cell - blanks
+            if (dayIndex !in days.indices) continue
+            val col = cell % columns
+            val row = cell / columns
+            val level = ChartMath.heatLevel(segments.getOrElse(dayIndex) { 0 })
             val left = col * cellW
             val top = row * cellH
             drawRoundRect(
                 color = levelColors.getOrElse(level) { levelColors.last() },
-                topLeft = Offset(left + 1f, top + 1f),
-                size = Size(cellW - 2f, cellH - 2f),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f),
+                topLeft = Offset(left + 2f, top + 2f),
+                size = Size((cellW - 4f).coerceAtLeast(0f), (cellH - 4f).coerceAtLeast(0f)),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f),
             )
-            if (segments.getOrElse(index) { 0 } > 0) {
-                drawContext.canvas.nativeCanvas.drawText(
-                    segments[index].toString(),
-                    left + cellW / 2,
-                    top + cellH / 2 + textSizePx * 0.35f,
-                    chartPaint(numberColor, textSizePx).apply { textAlign = android.graphics.Paint.Align.CENTER },
-                )
+            val ink = if (level >= 3) android.graphics.Color.WHITE else null
+            val paint = if (ink == null) {
+                chartPaint(numberColor, textSizePx)
+            } else {
+                chartPaint(Color.White, textSizePx)
             }
+            drawContext.canvas.nativeCanvas.drawText(
+                days[dayIndex].dayOfMonth.toString(),
+                left + cellW / 2,
+                top + cellH / 2 + textSizePx * 0.35f,
+                paint.apply { textAlign = android.graphics.Paint.Align.CENTER },
+            )
         }
     }
 }
 
 /** 热力图高度按行数算，避免出现内部依赖 */
-private fun sizeOf(days: Int): Dp {
-    val rows = max(1, (days + 6) / 7)
-    return Dp((rows * 34).toFloat())
+private fun sizeOf(cellCount: Int): Dp {
+    val rows = max(1, (cellCount + 6) / 7)
+    return Dp((rows * 36).toFloat())
 }
 
 /** 避免在本文件顶部引入 java.time 别名造成误读 */

@@ -33,7 +33,7 @@ class SchemaGuardTest {
      * JSON 是美化格式，"tableName": "x" 冒号后有空格 —— 必须用容忍空白的正则而不是字面 contains。
      */
     @Test fun `exported schema json is on the classpath and describes exactly 8 tables`() {
-        val path = "com.fitrecord.app.data.db.FitRecordDatabase/1.json"
+        val path = "com.fitrecord.app.data.db.FitRecordDatabase/2.json"
         val stream = javaClass.classLoader!!.getResourceAsStream(path)
         assertNotNull(
             "$path 缺失：检查 exportSchema=true、ksp{arg(room.schemaLocation)} 与 sourceSets.test.resources.srcDirs",
@@ -43,7 +43,7 @@ class SchemaGuardTest {
         assertTrue("schema JSON 应含 identityHash（Room 用它校验实体与建表 SQL 一致）", text.contains("identityHash"))
 
         val versionInFile = Regex("\"version\"\\s*:\\s*(\\d+)").find(text)!!.groupValues[1].toInt()
-        assertEquals("导出的 schema 版本必须与 @Database(version=…) 一致", 1, versionInFile)
+        assertEquals("导出的 schema 版本必须与 @Database(version=…) 一致", 2, versionInFile)
 
         for (table in listOf(
             "exercise_type", "body_part", "training_record", "record_body_part",

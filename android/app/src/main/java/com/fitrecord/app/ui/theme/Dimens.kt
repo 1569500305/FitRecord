@@ -12,12 +12,15 @@ object Dimens {
     val chipCorner: Dp = 8.dp
     val sheetCorner: Dp = 24.dp
 
-    val dayCellHeightWeek: Dp = 44.dp
+    val dayCellHeightWeek: Dp = 48.dp
     val dayCellHeightMonth: Dp = 64.dp
     val dayCellHeightMonthLarge: Dp = 80.dp   // 字号 1.3× 时（规格 5.3）
 
     val navBarHeight: Dp = 64.dp
-    val fabSize: Dp = 56.dp
+    /** 首页右侧可拖动的添加按钮，比标准 56dp 更小，少挡概况。 */
+    val fabSize: Dp = 40.dp
+    /** 添加按钮里的加号。 */
+    val fabIconSize: Dp = 18.dp
     val minTouchTarget: Dp = 48.dp
 
     val chartHeight: Dp = 180.dp
@@ -28,6 +31,9 @@ object Dimens {
     val dotSize: Dp = 6.dp
     val selectedCircle: Dp = 40.dp
     val lunarPlaceholder: Dp = 10.dp           // 农历占位行（V1 不显示内容）
+
+    val strokeWidth: Dp = 1.dp
+    val typeChipWidth: Dp = 72.dp
 
     val space2: Dp = 2.dp
     val space4: Dp = 4.dp

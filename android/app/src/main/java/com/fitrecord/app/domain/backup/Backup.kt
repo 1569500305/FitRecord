@@ -36,6 +36,9 @@ data class RecordDto(
     val calories: Double? = null,
     val bodyParts: List<String> = emptyList(),
     val note: String = "",
+    /** 0 表示这条记录按时长填写。旧备份没有这两列时保持 0 */
+    val setCount: Int = 0,
+    val repsPerSet: Int = 0,
 )
 
 @Serializable

@@ -35,8 +35,10 @@ class SeedRepository(
                     // 内置类型按下标显式取色，不做轮询：调色板将来加色时颜色不会静默漂移（评审 M-2）
                     color = ExercisePalette.colors[item.colorIndex].toRgbLong(),
                     isBuiltin = true,
+                    archived = item.archived,
                     sortOrder = index,
                     defaultBodyPartIds = item.defaultBodyPartIds,
+                    recordBySets = item.recordBySets,
                 )
             }
         )

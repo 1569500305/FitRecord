@@ -46,6 +46,8 @@ fun AppCard(
         modifier = if (onClick == null) base else base.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        // 阴影在浅色底上会随输入重组重绘，整张卡片闪一下；边框已经够区分层次
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(Dimens.cardPadding)) { content() }
@@ -89,7 +91,8 @@ fun RecordCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val desc = "${record.type.name}，${record.durationMin} 分钟，" +
+    val effort = record.effortText()
+    val desc = "${record.type.name}，$effort，" +
         (record.calories?.let { "${it.toInt()} 千卡" } ?: "待完善体重")
     AppCard(modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -108,7 +111,7 @@ fun RecordCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${record.durationMin} 分钟",
+                text = effort,
                 style = MaterialTheme.typography.titleLarge,
             )
             IconButton(onClick = onDelete, modifier = Modifier.semantics { contentDescription = "删除这段训练" }) {

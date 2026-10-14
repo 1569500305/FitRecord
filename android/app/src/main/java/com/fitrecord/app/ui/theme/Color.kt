@@ -54,6 +54,7 @@ object AppColors {
         outline = Outline,
         error = ErrorLight,
         onError = Color(0xFFFFFFFF),
+        surfaceTint = Color.Transparent,
     )
 
     val dark: ColorScheme = darkColorScheme(
@@ -72,6 +73,7 @@ object AppColors {
         outline = OutlineDark,
         error = ErrorDark,
         onError = Color(0xFF2B0000),
+        surfaceTint = Color.Transparent,
     )
 
     /** 日历格"未健身"灰字：Material3 无对应槽位，单独暴露（规格 2.1） */
@@ -85,7 +87,7 @@ object AppColors {
 
 /**
  * 运动类型配色（规格 2.1）。下标顺序即内置库顺序：
- * 划船机 椭圆机 动感单车 跑步机 自由力量 瑜伽 快走 游泳
+ * 划船机 椭圆机 动感单车 跑步机 自由力量 瑜伽 快走 游泳 深蹲 俯卧撑 哑铃
  */
 object ExercisePalette {
 
@@ -98,6 +100,9 @@ object ExercisePalette {
         Color(0xFF20B2AA), // 瑜伽
         Color(0xFFD9772E), // 快走
         Color(0xFF5C7CC9), // 游泳
+        Color(0xFFE85D4C), // 深蹲
+        Color(0xFF1AA6A6), // 俯卧撑
+        Color(0xFF5B6CFF), // 哑铃
     )
 
     /** 自定义类型按 id 轮询取色；floorMod 保证负 id（脏数据）也不越界 */
@@ -119,6 +124,21 @@ object HeatLevels {
 
 /** 环形图"其他"扇区固定灰（规格 4.6） */
 val ColorOthers: Color = Color(0xFFB6BABD)
+
+/**
+ * 统计页运动方式圆环的高对比色。
+ * 只用于占比图和图例，不替换类型库原色，日历圆点仍用 [ExercisePalette]。
+ */
+object DonutContrast {
+    val colors: List<Color> = listOf(
+        Color(0xFFE53935),
+        Color(0xFF1E88E5),
+        Color(0xFF43A047),
+        Color(0xFF8E24AA),
+        Color(0xFFFB8C00),
+        Color(0xFF00897B),
+    )
+}
 
 // ---------- 颜色 ↔ 存库 Long（Room 存 ARGB Int 位模式，规格 4.2 color INT）----------
 
