@@ -83,21 +83,7 @@ class BackupRepository(
     }
 
     private suspend fun buildBackupFile(): BackupFile {
-        val partsById = bodyPartDao.all().associate { it.id to it.name }
-        val linksByRecord = trainingDao.allLinks().groupBy { it.recordId }
-        val records = trainingDao.rangeOnce(0, Int.MAX_VALUE).map { row ->
-            RecordDto(
-                date = LocalDate.ofEpochDay(row.date.toLong()).toString(),
-                exercise = row.typeName,
-                met = row.met,
-                durationMin = row.durationMin,
-                calories = row.calories,
-                bodyParts = linksByRecord[row.id].orEmpty().mapNotNull { partsById[it.bodyPartId] },
-                note = row.note,
-                setCount = row.setCount,
-                repsPerSet = row.repsPerSet,
-            )
-        }
+        val records = currentRecordDtos()
         return BackupFile(
             schemaVersion = BackupCodec.CURRENT_VERSION,
             exportedAt = LocalDateTime.now().toString(),
@@ -310,7 +296,7 @@ class BackupRepository(
             dto to row.id
         }
 
-    /** 当前全部记录（含部位名），供 CSV 导出 */
+    /** 当前全部记录（含部位名和组数）。JSON 原样写出；CSV 只取其中的时长列。 */
     private suspend fun currentRecordDtos(): List<RecordDto> {
         val partsById = bodyPartDao.all().associate { it.id to it.name }
         val linksByRecord = trainingDao.allLinks().groupBy { it.recordId }
@@ -323,6 +309,8 @@ class BackupRepository(
                 calories = row.calories,
                 bodyParts = linksByRecord[row.id].orEmpty().mapNotNull { partsById[it.bodyPartId] },
                 note = row.note,
+                setCount = row.setCount,
+                repsPerSet = row.repsPerSet,
             )
         }
     }

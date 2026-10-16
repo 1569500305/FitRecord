@@ -1,7 +1,9 @@
 package com.fitrecord.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fitrecord.app.ui.theme.Dimens
-import com.fitrecord.app.ui.theme.MetricNumber
 
 /**
  * 分段切换（规格 2.4）。刻意用 Box + clickable 手写而不是 Material3 的
@@ -82,6 +83,64 @@ fun SegmentedSwitch(
     }
 }
 
+/**
+ * 周/月切换，做成一颗按钮。
+ * 选中段用日历选中日的底色和描边，未选中段留白。
+ */
+@Composable
+fun ViewModeSwitch(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Dimens.chipCorner)
+    Row(
+        modifier = modifier
+            .height(32.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(Dimens.strokeWidth, MaterialTheme.colorScheme.outline, shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(shape)
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .then(
+                        if (selected) {
+                            Modifier.border(Dimens.strokeWidth, MaterialTheme.colorScheme.primary, shape)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onSelect(index) },
+                    )
+                    .semantics { contentDescription = "$label 视图" }
+                    .padding(horizontal = Dimens.space16),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
 /** 快捷时长。最后一格是加 5 分钟，不是一个固定时长。 */
 private val QUICK_MINUTES = listOf(20, 30, 45, 60, 90)
 private const val MAX_MINUTES = 1440
@@ -119,7 +178,7 @@ fun MinuteField(
         suffix = {
             Text("分钟", style = MaterialTheme.typography.bodyMedium)
         },
-        textStyle = MetricNumber,
+        textStyle = MaterialTheme.typography.titleLarge,
         isError = error != null,
         supportingText = error?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
         singleLine = true,

@@ -56,7 +56,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -78,7 +79,7 @@ import com.fitrecord.app.domain.DayCell
 import com.fitrecord.app.ui.components.AppCard
 import com.fitrecord.app.ui.components.DayCellView
 import com.fitrecord.app.ui.components.InfoBanner
-import com.fitrecord.app.ui.components.SegmentedSwitch
+import com.fitrecord.app.ui.components.ViewModeSwitch
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.ExerciseIcons
 import java.time.LocalDate
@@ -163,7 +164,7 @@ fun CalendarScreen(nav: NavHostController) {
                                 modifier = Modifier.padding(end = Dimens.space8),
                             )
                         }
-                        SegmentedSwitch(
+                        ViewModeSwitch(
                             options = listOf("周", "月"),
                             selectedIndex = if (ui.isWeekMode) 0 else 1,
                             onSelect = vm::onViewMode,
@@ -546,8 +547,8 @@ private fun MonthGrid(
         transitionSpec = { monthSlide() },
         modifier = Modifier
             .fillMaxWidth()
-            .clipToBounds()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .clipSlideBounds(),
         label = "monthGrid",
     ) { key ->
         val pageCells = if (key == currentKey) cells else frames.previousCells
@@ -559,6 +560,14 @@ private fun MonthGrid(
             onLastDayPositioned = if (reportLastDay) onLastDayPositioned else null,
         )
     }
+}
+
+/**
+ * 裁掉滑出网格的月份。
+ * 不用 clipToBounds：它会建硬件层，深色下这一层第一帧按浅色窗口清屏。
+ */
+private fun Modifier.clipSlideBounds(): Modifier = drawWithContent {
+    clipRect { this@drawWithContent.drawContent() }
 }
 
 /** 翻月用纯滑动，不淡入淡出、不改高度，避免底色透出或整页跳动。 */
@@ -585,7 +594,11 @@ private fun MonthCells(
     onLastDayPositioned: ((LayoutCoordinates) -> Unit)?,
 ) {
     val lastIndex = cells.lastIndex
-    Column(Modifier.fillMaxWidth()) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         cells.chunked(7).forEachIndexed { weekIndex, week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEachIndexed { dayIndex, cell ->

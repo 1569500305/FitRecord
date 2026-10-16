@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.fitrecord.app.data.db.entity.ExerciseTypeEntity
 import kotlinx.coroutines.flow.Flow
@@ -30,9 +31,6 @@ interface TypeDao {
 
     @Insert
     suspend fun insert(entity: ExerciseTypeEntity): Long
-
-    @Insert
-    suspend fun insertAll(entities: List<ExerciseTypeEntity>): List<Long>
 
     /**
      * 种子专用：已存在的类型名（唯一索引冲突）跳过而不覆盖，
@@ -66,6 +64,15 @@ interface TypeDao {
 
     @Query("UPDATE exercise_type SET archived = 0 WHERE id = :id")
     suspend fun unarchive(id: Long)
+
+    @Query("UPDATE exercise_type SET sortOrder = :sortOrder WHERE id = :id")
+    suspend fun updateSortOrder(id: Long, sortOrder: Int)
+
+    /** 按给定 id 顺序重写 sortOrder，选择训练时靠前的类型会先出现。 */
+    @Transaction
+    suspend fun reorder(ids: List<Long>) {
+        ids.forEachIndexed { index, id -> updateSortOrder(id, index) }
+    }
 
     /** 删除前的引用检查（规格 P7：被引用的类型不得删除） */
     @Query("SELECT COUNT(*) FROM training_record WHERE exerciseTypeId = :id")

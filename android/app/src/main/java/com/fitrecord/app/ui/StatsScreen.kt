@@ -46,7 +46,7 @@ import com.fitrecord.app.ui.components.EmptyState
 import com.fitrecord.app.ui.components.LegendRow
 import com.fitrecord.app.core.WeekUtil
 import com.fitrecord.app.domain.StatsUiModel
-import com.fitrecord.app.ui.components.SegmentedSwitch
+import com.fitrecord.app.ui.components.ViewModeSwitch
 import com.fitrecord.app.ui.theme.ColorOthers
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.DonutContrast
@@ -82,7 +82,7 @@ fun StatsScreen(nav: NavHostController) {
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f),
                     )
-                    SegmentedSwitch(
+                    ViewModeSwitch(
                         options = listOf("周", "月"),
                         selectedIndex = if (isWeek) 0 else 1,
                         onSelect = { vm.onPeriodType(it) },

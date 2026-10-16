@@ -38,9 +38,6 @@ interface TrainingDao {
     @Insert
     suspend fun insert(entity: TrainingRecordEntity): Long
 
-    @Insert
-    suspend fun insertAll(entities: List<TrainingRecordEntity>): List<Long>
-
     @Update
     suspend fun update(entity: TrainingRecordEntity)
 

@@ -31,11 +31,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.fitrecord.app.BuildConfig
 import com.fitrecord.app.LocalContainer
+import com.fitrecord.app.data.db.entity.UserProfileEntity
 import com.fitrecord.app.ui.components.AppCard
 import com.fitrecord.app.ui.components.SegmentedSwitch
 import com.fitrecord.app.ui.components.stableOutlinedTextFieldColors
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.ThemeMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 
@@ -154,14 +157,18 @@ fun AppearanceScreen(nav: NavHostController) {
 @Composable
 fun ProfileScreen(nav: NavHostController) {
     val container = LocalContainer.current
-    val profile by container.profileDao.observeProfile().collectAsStateWithLifecycle(initialValue = null)
-    val types by container.typeDao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
-    val parts by container.bodyPartDao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    // 数据库还没吐出第一帧时，null 和「确实没填」分不开，不能先画出空态按钮。
+    val profileFlow = remember(container) { container.profileDao.observeProfile() }
+    val typesFlow = remember(container) { container.typeDao.observeAll() }
+    val partsFlow = remember(container) { container.bodyPartDao.observeAll() }
+    val profile = collectReady(profileFlow, null)
+    val types = collectReady(typesFlow, emptyList())
+    val parts = collectReady(partsFlow, emptyList())
     var showAbout by remember { mutableStateOf(false) }
 
     // 累计总账（规格 P3 页脚）
     val lifetime = remember { mutableStateOf(Triple(0, 0, 0)) }
-    LaunchedEffect(profile, types) {
+    LaunchedEffect(profile.value, types.value) {
         runCatching {
             Triple(
                 container.statsDao.lifetimeDays(),
@@ -178,38 +185,14 @@ fun ProfileScreen(nav: NavHostController) {
             verticalArrangement = Arrangement.spacedBy(Dimens.cardGap),
         ) {
             item { Text("我的", style = MaterialTheme.typography.headlineSmall) }
+            item { BodySummaryCard(profile) { nav.navigate(Routes.BODY) } }
             item {
-                AppCard(onClick = { nav.navigate(Routes.BODY) }) {
-                    val p = profile
-                    if (p == null) {
-                        Text("还没有身体参数", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "体重用于计算卡路里消耗",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(Dimens.space8))
-                        Button(onClick = { nav.navigate(Routes.BODY) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("完善身体参数")
-                        }
-                    } else {
-                        Text(
-                            listOfNotNull(
-                                "${p.weightKg} kg",
-                                p.heightCm?.let { "${it} cm" },
-                                p.age?.let { "$it 岁" },
-                                when (p.gender) { "M" -> "男"; "F" -> "女"; else -> null },
-                            ).joinToString(" · "),
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                    }
-                }
+                ProfileRow("运动类型", countSubtitle(types) { list ->
+                    "${list.size} 项（自定义 ${list.count { !it.isBuiltin }}）"
+                }) { nav.navigate(Routes.TYPE_LIST) }
             }
             item {
-                ProfileRow("运动类型", "${types.size} 项（自定义 ${types.count { !it.isBuiltin }}）") { nav.navigate(Routes.TYPE_LIST) }
-            }
-            item {
-                ProfileRow("锻炼部位", "${parts.size} 项（V1 固定）", onClick = null)
+                ProfileRow("锻炼部位", countSubtitle(parts) { "${it.size} 项（V1 固定）" }, onClick = null)
             }
             item { ProfileRow("数据备份与恢复", "导出 / 导入 JSON") { nav.navigate(Routes.BACKUP) } }
             item { ProfileRow("外观与主题", "深色模式 · 周起始日") { nav.navigate(Routes.APPEARANCE) } }
@@ -230,6 +213,59 @@ fun ProfileScreen(nav: NavHostController) {
             title = { Text("轻体记") },
             text = { Text("无网络请求 · 无广告 · 无账号\n数据只存在这台手机里\n\n版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})") },
             confirmButton = { TextButton(onClick = { showAbout = false }) { Text("关闭") } },
+        )
+    }
+}
+
+/** 数据库尚未返回时的占位。isReady 为 false 表示还不知道真实值。 */
+private data class ReadyValue<T>(val value: T, val isReady: Boolean = false)
+
+/**
+ * 收集一条数据库 Flow。第一帧保持未就绪，避免把「还在查询」画成空数据。
+ */
+@Composable
+private fun <T> collectReady(flow: Flow<T>, empty: T): ReadyValue<T> {
+    val readyFlow = remember(flow) { flow.map { ReadyValue(it, true) } }
+    val snapshot by readyFlow.collectAsStateWithLifecycle(initialValue = ReadyValue(empty))
+    return snapshot
+}
+
+/** 列表还没读到时副标题留空，不先显示 0 项。 */
+private fun <T> countSubtitle(snapshot: ReadyValue<List<T>>, format: (List<T>) -> String): String =
+    if (snapshot.isReady) format(snapshot.value) else " "
+
+/**
+ * 身体参数卡。查询完成前只占一行高度，不显示「完善身体参数」。
+ */
+@Composable
+private fun BodySummaryCard(profile: ReadyValue<UserProfileEntity?>, onOpen: () -> Unit) {
+    AppCard(onClick = if (profile.isReady) onOpen else null) {
+        if (!profile.isReady) {
+            Text(" ", style = MaterialTheme.typography.titleLarge)
+            return@AppCard
+        }
+        val saved = profile.value
+        if (saved == null) {
+            Text("还没有身体参数", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "体重用于计算卡路里消耗",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Dimens.space8))
+            Button(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+                Text("完善身体参数")
+            }
+            return@AppCard
+        }
+        Text(
+            listOfNotNull(
+                "${saved.weightKg} kg",
+                saved.heightCm?.let { "${it} cm" },
+                saved.age?.let { "$it 岁" },
+                when (saved.gender) { "M" -> "男"; "F" -> "女"; else -> null },
+            ).joinToString(" · "),
+            style = MaterialTheme.typography.titleLarge,
         )
     }
 }

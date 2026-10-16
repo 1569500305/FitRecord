@@ -2,7 +2,6 @@ package com.fitrecord.app.ui.charts
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +20,6 @@ import androidx.compose.ui.unit.Dp
 import com.fitrecord.app.ui.theme.Dimens
 import com.fitrecord.app.ui.theme.toColor
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -38,6 +36,12 @@ data class ChartPoint(val label: String, val value: Float)
 object ChartMath {
 
     private val MANTISSAS = listOf(1f, 2f, 2.5f, 5f, 10f)
+
+    /** 环形图从 12 点方向起笔。 */
+    private const val DONUT_START_DEGREES = -90f
+
+    /** 完整圆环对应的角度。 */
+    private const val FULL_CIRCLE_DEGREES = 360f
 
     /** 轴上限向上取到"好看"的刻度（1/2/2.5/5 × 10^n） */
     fun scaleMax(values: List<Float>): Float {
@@ -74,17 +78,37 @@ object ChartMath {
         else -> segments
     }
 
-    /** 环形图各片的起止角度（度），从 -90°（12 点）起顺时针 */
+    /**
+     * 按时长比例拆环形图扇区。
+     *
+     * @param values 各运动方式时长；负数按 0，总时长不大于 0 时返回空列表
+     * @return 每片的（起始角, 扫过角），单位度。从 12 点顺时针排列，扫过角与时长成正比，合计正好 360°
+     */
     fun donutSlices(values: List<Float>): List<Pair<Float, Float>> {
-        val total = values.sum()
+        val weights = values.map { it.coerceAtLeast(0f) }
+        val total = weights.sum()
         if (total <= 0f) return emptyList()
-        var cursor = -90f
-        return values.map { value ->
-            val sweep = value / total * 360f
-            val pair = cursor to cursor + sweep
+        var cursor = DONUT_START_DEGREES
+        val slices = weights.map { weight ->
+            val sweep = weight / total * FULL_CIRCLE_DEGREES
+            val slice = cursor to sweep
             cursor += sweep
-            pair
+            slice
         }
+        return closeDonutRing(slices)
+    }
+
+    /**
+     * 把浮点余量补进最后一片，使各片扫过角之和正好为一圈。
+     */
+    private fun closeDonutRing(slices: List<Pair<Float, Float>>): List<Pair<Float, Float>> {
+        if (slices.isEmpty()) return slices
+        val consumed = slices.sumOf { it.second.toDouble() }.toFloat()
+        val gap = FULL_CIRCLE_DEGREES - consumed
+        if (gap == 0f) return slices
+        val last = slices.last()
+        val closedSweep = (last.second + gap).coerceIn(0f, FULL_CIRCLE_DEGREES)
+        return slices.dropLast(1) + (last.first to closedSweep)
     }
 
     /** 雷达图第 index 轴的顶点；0 号轴指向正上方 */
@@ -269,6 +293,7 @@ fun DonutChart(
             center.x - radius, center.y - radius, center.x + radius, center.y + radius,
         )
         pairs.forEachIndexed { index, (start, sweep) ->
+            if (sweep <= 0f || index !in slices.indices) return@forEachIndexed
             val (_, colorLong) = slices[index]
             drawArc(
                 color = colorLong.toColor().copy(alpha = if (selected != null && selected != index) 0.35f else 1f),

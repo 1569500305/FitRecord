@@ -1,11 +1,33 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- 浅色为默认。对比度蒙层关掉：浅色下键盘弹出时系统会来回铺一层灰，看起来像整页闪 -->
+    <!--
+      浅色为默认。对比度蒙层关掉：浅色下键盘弹出时系统会来回铺一层灰，看起来像整页闪。
+      colorBackground / isLightTheme 必须和 windowBackground 一起设。
+      页面切换、日历滑动会建硬件层，系统用这组属性决定清屏颜色；只改 Compose 配色清出来的仍是浅色。
+    -->
     <style name="Theme.FitRecord" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:isLightTheme" tools:targetApi="29">true</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+    <!-- 深色窗口。父主题不能再用 Material.Light，否则系统仍按浅色窗口合成。 -->
+    <style name="Theme.FitRecord.Dark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_dark</item>
+        <item name="android:colorBackground">@color/window_background_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+        <item name="android:isLightTheme" tools:targetApi="29">false</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
         <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
         <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>

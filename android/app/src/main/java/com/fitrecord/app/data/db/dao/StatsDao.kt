@@ -34,13 +34,6 @@ interface StatsDao {
     @Query("SELECT COUNT(*) FROM training_record WHERE calories IS NULL AND date BETWEEN :f AND :t")
     suspend fun uncalculated(f: Int, t: Int): Int
 
-    @Query(
-        """SELECT date, COUNT(*) AS segments, SUM(durationMin) AS minutes
-           FROM training_record WHERE date BETWEEN :f AND :t
-           GROUP BY date ORDER BY date"""
-    )
-    suspend fun perDay(f: Int, t: Int): List<PerDayRow>
-
     /** 日历页随写入自动刷新的版本（规格 4.6 / Task 14 的 GridKey 驱动） */
     @Query(
         """SELECT date, COUNT(*) AS segments, SUM(durationMin) AS minutes
@@ -73,10 +66,6 @@ interface StatsDao {
            GROUP BY bp.id ORDER BY segments DESC"""
     )
     suspend fun perPart(f: Int, t: Int): List<PerPartRow>
-
-    /** 日历分页器的最早可翻月份依据（规格 P1） */
-    @Query("SELECT MIN(date) FROM training_record")
-    suspend fun oldestDay(): Int?
 
     // ---------- 全生命周期总账（P3 页脚）----------
 

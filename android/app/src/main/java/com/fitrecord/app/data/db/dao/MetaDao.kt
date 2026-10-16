@@ -13,7 +13,4 @@ interface MetaDao {
 
     @Upsert
     suspend fun put(entity: MetaEntity)
-
-    @Query("DELETE FROM meta WHERE key = :key")
-    suspend fun remove(key: String)
 }

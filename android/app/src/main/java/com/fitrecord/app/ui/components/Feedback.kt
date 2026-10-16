@@ -3,6 +3,7 @@ package com.fitrecord.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,7 +166,11 @@ fun DayCellView(
             .fillMaxWidth()
             .height(if (compact) Dimens.dayCellHeightWeek else Dimens.dayCellHeightMonth)
             .clip(RoundedCornerShape(Dimens.chipCorner))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
@@ -175,7 +181,7 @@ fun DayCellView(
                 style = MaterialTheme.typography.bodyMedium.let { body ->
                     body.copy(fontSize = (body.fontSize.value + 2f).sp)
                 },
-                fontWeight = if (cell.trained || cell.isToday) FontWeight.Medium else FontWeight.Normal,
+                fontWeight = FontWeight.Bold,
                 color = when {
                     cell.isToday -> MaterialTheme.colorScheme.onPrimary
                     // 当月日期一律黑色（是否已练靠字重 + 下方图标/色点区分，不靠颜色）；非当月置灰

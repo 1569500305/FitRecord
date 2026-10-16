@@ -9,16 +9,21 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
@@ -128,8 +134,15 @@ fun DayRecordScreen(nav: NavHostController, date: LocalDate) {
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // 全屏绘制时系统不会把页面顶上去，备注要自己让出输入法高度并滚进可视区。
+    Scaffold(
+        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(Dimens.pagePadding),
             verticalArrangement = Arrangement.spacedBy(Dimens.cardGap),
@@ -178,13 +191,18 @@ fun DayRecordScreen(nav: NavHostController, date: LocalDate) {
                 ) { Text("＋ 添加一段训练") }
             }
             item {
+                val noteIndex = 4 + ui.records.size
                 OutlinedTextField(
                     value = ui.dayNote,
                     onValueChange = { vm.saveNote(it) },
                     label = { Text("当日备注") },
                     placeholder = { Text("重量、组数、感受…") },
                     colors = stableOutlinedTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { state ->
+                            if (state.isFocused) scope.launch { listState.animateScrollToItem(noteIndex) }
+                        },
                 )
             }
         }
@@ -228,8 +246,12 @@ fun RecordEditorScreen(nav: NavHostController, date: LocalDate, recordId: Long) 
         if (ui.dirty && !savedOnce) showDiscard = true else nav.popBackStack()
     }
 
-    Scaffold { padding ->
+    val listState = rememberLazyListState()
+    Scaffold(
+        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
+    ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = Dimens.pagePadding, vertical = Dimens.space8),
             verticalArrangement = Arrangement.spacedBy(Dimens.space8),
@@ -328,7 +350,11 @@ fun RecordEditorScreen(nav: NavHostController, date: LocalDate, recordId: Long) 
                     supportingText = ui.errors.firstOrNull { it.contains("备注") }?.let { { Text(it) } },
                     colors = stableOutlinedTextFieldColors(),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { state ->
+                            if (state.isFocused) scope.launch { listState.animateScrollToItem(NOTE_ITEM_INDEX) }
+                        },
                 )
             }
         }
@@ -424,14 +450,26 @@ private fun RowScope.CountStepper(
     }
 }
 
-/** 运动方式横滑选择。选中项用类型色描边和浅底，并带上对应运动图标。 */
+/** 备注在新增训练列表里的位置：顶栏、日期、方式、时长、部位、消耗、备注。 */
+private const val NOTE_ITEM_INDEX = 6
+
+/**
+ * 运动类型页顶部的顺序预览。芯片排版与新增记录相同，不可点选。
+ */
+@Composable
+fun ExerciseTypeOrderPreview(types: List<ExerciseTypeEntity>) {
+    ExerciseTypeCard(types = types, selectedTypeId = null, error = null, onSelect = null)
+}
+
+/** 运动方式排成两行，左右滑动时两行一起动。选中项用类型色描边和浅底，并带上对应运动图标。 */
 @Composable
 private fun ExerciseTypeCard(
     types: List<ExerciseTypeEntity>,
     selectedTypeId: Long?,
     error: String?,
-    onSelect: (Long) -> Unit,
+    onSelect: ((Long) -> Unit)?,
 ) {
+    val columns = types.chunked(2)
     AppCard {
         SectionTitle(Icons.Default.Star, "运动方式")
         Spacer(Modifier.height(Dimens.space4))
@@ -439,13 +477,17 @@ private fun ExerciseTypeCard(
             modifier = Modifier.heightIn(min = Dimens.minTouchTarget),
             horizontalArrangement = Arrangement.spacedBy(Dimens.space8),
         ) {
-            items(types, key = { it.id }) { type ->
-                ExerciseTypeChip(
-                    name = type.name,
-                    color = type.color.toColor(),
-                    selected = type.id == selectedTypeId,
-                    onClick = { onSelect(type.id) },
-                )
+            items(columns, key = { column -> column.first().id }) { column ->
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.space8)) {
+                    column.forEach { type ->
+                        ExerciseTypeChip(
+                            name = type.name,
+                            color = type.color.toColor(),
+                            selected = type.id == selectedTypeId,
+                            onClick = onSelect?.let { select -> { select(type.id) } },
+                        )
+                    }
+                }
             }
         }
         error?.let {
@@ -461,7 +503,7 @@ private fun ExerciseTypeChip(
     name: String,
     color: Color,
     selected: Boolean,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     val shape = RoundedCornerShape(Dimens.cardCorner)
     val emoji = ExerciseIcons.emoji(name) ?: "🏅"
@@ -475,7 +517,7 @@ private fun ExerciseTypeChip(
                 shape = shape,
             )
             .background(if (selected) color.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(vertical = Dimens.space4, horizontal = Dimens.space4),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

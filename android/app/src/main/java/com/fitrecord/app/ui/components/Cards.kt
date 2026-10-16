@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.fitrecord.app.data.repo.TrainingRepository
 import com.fitrecord.app.ui.theme.Dimens
@@ -39,6 +40,7 @@ import com.fitrecord.app.ui.theme.toColor
 fun AppCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    contentPadding: Dp = Dimens.cardPadding,
     content: @Composable () -> Unit,
 ) {
     val base = Modifier.fillMaxWidth().padding(vertical = Dimens.space4)
@@ -50,7 +52,7 @@ fun AppCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
-        Column(Modifier.padding(Dimens.cardPadding)) { content() }
+        Column(Modifier.padding(contentPadding)) { content() }
     }
 }
 

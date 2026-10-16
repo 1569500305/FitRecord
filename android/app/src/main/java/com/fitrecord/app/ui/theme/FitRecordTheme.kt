@@ -3,6 +3,8 @@ package com.fitrecord.app.ui.theme
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.drawable.ColorDrawable
+import android.view.View
+import java.util.WeakHashMap
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -14,11 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import com.fitrecord.app.R
 
 /** 规格 D8 / P10：三态主题。未设置时默认浅色。 */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -41,11 +45,7 @@ fun FitRecordTheme(
     themeMode: ThemeMode = ThemeMode.LIGHT,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val dark = themeMode.resolveDark(isSystemInDarkTheme())
     val colorScheme = if (dark) AppColors.dark else AppColors.light
     ApplyWindowChrome(dark = dark, background = colorScheme.background)
 
@@ -65,26 +65,74 @@ fun FitRecordTheme(
 }
 
 /**
- * 让系统栏和窗口底色跟应用主题走，而不是跟系统深浅色走。
- * 默认的 auto 样式会在浅色模式下强制导航栏对比度蒙层；键盘弹出时这层蒙层反复开关，整页就会闪。
+ * 三态主题折成实际深浅色。跟随系统时用调用方传入的系统夜间标记。
+ */
+fun ThemeMode.resolveDark(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+/**
+ * 让系统栏、窗口底色和 Compose 视图底色跟应用主题走。
+ * 硬件层在页面切换和日历滑动时会按窗口主题清屏；Manifest 若一直是浅色，
+ * 清出来的就是浅色模式。这里在深浅色变化时才重设，避免每一帧都动系统栏。
  */
 @Composable
 private fun ApplyWindowChrome(dark: Boolean, background: Color) {
     val view = LocalView.current
     if (view.isInEditMode) return
     val backgroundArgb = background.toArgb()
+    val applied = remember { WindowChromeStamp() }
     SideEffect {
+        if (applied.dark == dark && applied.backgroundArgb == backgroundArgb) return@SideEffect
         val activity = view.context.findActivity() ?: return@SideEffect
+        applied.dark = dark
+        applied.backgroundArgb = backgroundArgb
+        applyFitRecordWindowTheme(activity, dark, background, view)
+    }
+}
+
+/**
+ * 把 Activity 窗口切到与 [dark] 一致的主题，并铺上不透明底色。
+ *
+ * 必须在 DecorView 安装前调用一次（MainActivity.onCreate 里、super.onCreate 之前），
+ * 否则窗口按浅色主题创建，之后只改 drawable 盖不住转场清屏。
+ *
+ * @param composeView 组合根视图；转场出现透明帧时，它的底色就是用户看见的那一层。
+ */
+fun applyFitRecordWindowTheme(
+    activity: ComponentActivity,
+    dark: Boolean,
+    background: Color,
+    composeView: View? = null,
+) {
+    // 主题没变就不要再 setTheme。安装 Decor 之后重复 setTheme 会把窗口打回主题默认底，切页时闪一下。
+    if (windowDarkByActivity[activity] != dark) {
+        activity.setTheme(if (dark) R.style.Theme_FitRecord_Dark else R.style.Theme_FitRecord)
         val transparent = android.graphics.Color.TRANSPARENT
         val barStyle = if (dark) {
             SystemBarStyle.dark(transparent)
         } else {
+            // light 样式不会打开导航栏对比度蒙层；auto 才会，浅色输入时整页会闪
             SystemBarStyle.light(transparent, transparent)
         }
-        // light/dark 样式不会打开导航栏对比度蒙层；auto 才会，那正是浅色输入时闪屏的来源
         activity.enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
-        activity.window.setBackgroundDrawable(ColorDrawable(backgroundArgb))
+        windowDarkByActivity[activity] = dark
     }
+    val backgroundArgb = background.toArgb()
+    activity.window.setBackgroundDrawable(ColorDrawable(backgroundArgb))
+    activity.window.decorView.setBackgroundColor(backgroundArgb)
+    composeView?.setBackgroundColor(backgroundArgb)
+}
+
+/** Activity 实例上已经套过的深浅色。用弱引用，避免窗口销毁后还被这条缓存留住。 */
+private val windowDarkByActivity = WeakHashMap<ComponentActivity, Boolean>()
+
+/** 已经套到窗口上的深浅色，避免 SideEffect 每次重组都重设系统栏。 */
+private class WindowChromeStamp {
+    var dark: Boolean? = null
+    var backgroundArgb: Int? = null
 }
 
 /** 从 ContextThemeWrapper 里找出 Activity；预览或测试环境可能没有。 */

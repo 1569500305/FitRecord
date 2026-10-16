@@ -1,4 +1,6 @@
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- 与 AppColors 的 background / backgroundDark 保持一致。窗口主题用这两色，不能只改 Compose。 -->
     <color name="window_background">#F5F6F7</color>
+    <color name="window_background_dark">#101114</color>
 </resources>
